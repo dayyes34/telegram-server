@@ -1,6 +1,59 @@
-const bot = require('../config/telegramBot');
-const User = require('../models/User');
+require('dotenv').config(); // Загружаем переменные окружения в самом начале
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
 
+const bot = require('../config/telegramBot'); // Ваша существующая инициализация бота
+const User = require('../models/User'); // Ваша модель пользователя
+const userRoutes = require('../routes/userRoutes'); // Ваши маршруты для API
+
+const app = express();
+const PORT = process.env.PORT || 5001;
+
+// Middleware для Express
+app.use(cors({
+  origin: [process.env.WEBAPP_URL, 'https://t.me', 'http://localhost:3000'], // Добавьте другие источники если нужно
+  credentials: true
+}));
+app.use(express.json()); // для парсинга application/json
+
+// Логирование запросов для отладки (опционально)
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.originalUrl}`);
+  next();
+});
+
+// Подключение к MongoDB
+const mongoURI = process.env.MONGODB_URI;
+if (!mongoURI) {
+  console.error('Ошибка: MONGODB_URI не задана в переменных окружения.');
+  process.exit(1); // Выход, если нет URI для MongoDB
+}
+
+mongoose.connect(mongoURI)
+  .then(() => console.log('Успешное подключение к MongoDB'))
+  .catch(err => {
+    console.error('Ошибка подключения к MongoDB:', err);
+    process.exit(1); // Выход при ошибке подключения
+  });
+
+mongoose.connection.on('error', err => {
+  console.error('Ошибка MongoDB в процессе работы:', err);
+});
+
+// Маршруты API
+// Nginx будет проксировать с https://ваш-домен.рф/telegram-api/users/...
+// на http://localhost:PORT/telegram-api/users/...
+// Поэтому здесь мы используем /telegram-api/users как базовый путь для userRoutes
+app.use('/telegram-api/users', userRoutes);
+
+// Базовый маршрут для проверки, что Express-сервер работает
+app.get('/telegram-api/status', (req, res) => {
+  res.json({ status: 'Telegram API server is running', botInitialized: !!bot });
+});
+
+
+// --- Существующая логика вашего Telegram бота ---
 // Глобальный обработчик ошибок бота
 bot.on('polling_error', (error) => {
   console.error('Ошибка Telegram бота:', error.code, error.message);
@@ -42,7 +95,7 @@ bot.onText(/\/start/, async (msg) => {
           }
         );
       } catch (sendError) {
-        console.error('Ошибка при отправке сообщения пользователю:', sendError.code, sendError.message);
+        console.error('Ошибка при отправке сообщения пользователю (новый):', sendError.code, sendError.message);
       }
     } else {
       // Обновляем информацию о пользователе
@@ -68,24 +121,24 @@ bot.onText(/\/start/, async (msg) => {
           }
         );
       } catch (sendError) {
-        console.error('Ошибка при отправке сообщения пользователю:', sendError.code, sendError.message);
+        console.error('Ошибка при отправке сообщения пользователю (существующий):', sendError.code, sendError.message);
       }
     }
   } catch (error) {
     console.error('Ошибка при обработке команды /start:', error);
     try {
-      bot.sendMessage(msg.chat.id, 'Произошла ошибка. Пожалуйста, попробуйте позднее.');
+      await bot.sendMessage(msg.chat.id, 'Произошла ошибка при обработке /start. Пожалуйста, попробуйте позднее.');
     } catch (sendError) {
-      console.error('Не удалось отправить сообщение об ошибке:', sendError.code);
+      console.error('Не удалось отправить сообщение об ошибке /start:', sendError.code);
     }
   }
 });
 
 // Обработка команды /help
-bot.onText(/\/help/, (msg) => {
+bot.onText(/\/help/, async (msg) => {
   const chatId = msg.chat.id;
   try {
-    bot.sendMessage(
+    await bot.sendMessage(
       chatId,
       `*Команды бота Drum Sequencer:*
       
@@ -100,10 +153,10 @@ bot.onText(/\/help/, (msg) => {
 });
 
 // Обработка команды /webapp
-bot.onText(/\/webapp/, (msg) => {
+bot.onText(/\/webapp/, async (msg) => {
   const chatId = msg.chat.id;
   try {
-    bot.sendMessage(
+    await bot.sendMessage(
       chatId,
       'Нажмите кнопку ниже, чтобы открыть приложение Drum Sequencer:',
       {
@@ -118,7 +171,33 @@ bot.onText(/\/webapp/, (msg) => {
     console.error('Ошибка при отправке сообщения с кнопкой webapp:', error.code, error.message);
   }
 });
+// --- Конец существующей логики вашего Telegram бота ---
 
-console.log('Telegram бот запущен');
+// Запуск HTTP-сервера Express
+app.listen(PORT, () => {
+  console.log(`HTTP сервер запущен на порту ${PORT}`);
+  console.log(`Telegram бот активен и ожидает сообщения (через polling)`);
+});
 
-module.exports = bot; 
+// Обработка необработанных ошибок (рекомендуется добавить)
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Необработанное отклонение промиса:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Необработанное исключение:', error);
+  // В продакшене здесь может быть логика для graceful shutdown или перезапуска
+  // process.exit(1); // Раскомментируйте, если хотите падать при необработанных исключениях
+});
+
+// Глобальный обработчик ошибок Express (должен быть последним app.use)
+app.use((err, req, res, next) => {
+  console.error('Глобальная ошибка сервера Express:', err.stack);
+  res.status(500).json({ message: 'Внутренняя ошибка сервера', error: err.message });
+});
+
+
+console.log('Инициализация Telegram бота и Express сервера завершена.');
+
+module.exports = bot; // Экспортируем бота, если он нужен где-то еще
+                      // Если нужно экспортировать и app, можно сделать module.exports = { app, bot }; 
