@@ -5,6 +5,7 @@ const cors = require('cors');
 
 const bot = require('../config/telegramBot'); // Ваша существующая инициализация бота
 const User = require('../models/User'); // Ваша модель пользователя
+const SequencerSession = require('../models/SequencerSession'); // <--- ЯВНЫЙ ИМПОРТ ЗДЕСЬ
 const userRoutes = require('../routes/userRoutes'); // Ваши маршруты для API
 
 const app = express();

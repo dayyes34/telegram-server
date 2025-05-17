@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const SequencerSession = require('../models/SequencerSession');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
