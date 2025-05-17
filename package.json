@@ -2,10 +2,10 @@
   "name": "drummer-sequencer-telegram-server",
   "version": "1.0.0",
   "description": "Telegram WebApp сервер для Drum Sequencer",
-  "main": "telegramServer.js",
+  "main": "bot/telegramBot.js",
   "scripts": {
-    "start": "node telegramServer.js",
-    "dev": "nodemon telegramServer.js"
+    "start": "node bot/telegramBot.js",
+    "dev": "nodemon bot/telegramBot.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
