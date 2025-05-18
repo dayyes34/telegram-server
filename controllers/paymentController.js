@@ -50,29 +50,49 @@ const createInvoice = async (req, res) => {
   }
   
   const payload = `bundle_purchase_${bundleId}_user_${userId}_${Date.now()}`;
+  
+  // Параметры для инвойса
+  const invoiceParams = {
+    title: bundleDetails.title,
+    description: bundleDetails.description || '',
+    payload: payload,
+    provider_token: TEST_PROVIDER_TOKEN,
+    currency: bundleDetails.currency,
+    prices: [{ label: bundleDetails.title, amount: bundleDetails.price_in_smallest_unit }],
+    // photo_url: bundleDetails.photo_url, // Опционально
+    // start_parameter: `bundle_${bundleId}` // Можно использовать для deeplink, если нужно
+  };
 
   try {
-    await bot.sendInvoice(
-      userId, 
-      bundleDetails.title,
-      bundleDetails.description || '', // description может быть не обязательным
-      payload,
-      TEST_PROVIDER_TOKEN,
-      bundleDetails.currency, 
-      [{ label: bundleDetails.title, amount: bundleDetails.price_in_smallest_unit }], // prices - массив, amount здесь уже в копейках
-      { 
-        // photo_url: bundleDetails.photo_url, // Если вы добавите photo_url на основном API
+    // Создаем ссылку на инвойс вместо прямой отправки
+    const invoiceLink = await bot.createInvoiceLink(
+      invoiceParams.title,
+      invoiceParams.description,
+      invoiceParams.payload,
+      invoiceParams.provider_token,
+      invoiceParams.currency,
+      invoiceParams.prices,
+      {
+        // photo_url: invoiceParams.photo_url, // Передаем опциональные параметры сюда
+        // start_parameter: invoiceParams.start_parameter
       }
     );
+
+    if (!invoiceLink) {
+      console.error('Не удалось создать ссылку на инвойс от Telegram API.');
+      return res.status(500).json({ message: 'Не удалось получить ссылку на инвойс от Telegram.' });
+    }
     
-    console.log('Счет успешно создан и отправлен пользователю:', userId, bundleId);
+    console.log('Ссылка на инвойс успешно создана для пользователя:', userId, 'бандл:', bundleId, 'ссылка:', invoiceLink);
+    // Отправляем ссылку на фронтенд
     res.status(200).json({ 
-      message: 'Счет успешно создан и отправлен в ваш чат с ботом.',
+      message: 'Ссылка на инвойс успешно создана.',
+      invoice_link: invoiceLink // Ключ, который фронтенд будет использовать
     });
 
   } catch (error) {
-    console.error('Ошибка при создании счета Telegram:', error.response ? error.response.body : error);
-    let errorMessage = 'Не удалось создать счет.';
+    console.error('Ошибка при создании ссылки на инвойс Telegram:', error.response ? error.response.body : error);
+    let errorMessage = 'Не удалось создать ссылку на инвойс.';
     if (error.response && error.response.body && error.response.body.description) {
         errorMessage += ` Детали: ${error.response.body.description}`;
     } else if (error.message) {
