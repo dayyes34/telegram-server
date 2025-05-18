@@ -7,6 +7,7 @@ const bot = require('../config/telegramBot'); // Ваша существующа
 const User = require('../models/User'); // Ваша модель пользователя
 const SequencerSession = require('../models/SequencerSession'); // <--- ЯВНЫЙ ИМПОРТ ЗДЕСЬ
 const userRoutes = require('../routes/userRoutes'); // Ваши маршруты для API
+const paymentRoutes = require('../routes/paymentRoutes'); // <--- ДОБАВЛЯЕМ ИМПОРТ МАРШРУТОВ ПЛАТЕЖЕЙ
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -50,6 +51,7 @@ mongoose.connection.on('error', err => {
 // В этом случае Nginx "отрезает" /telegram-api/ от пути перед передачей бэкенду.
 // Поэтому бэкенд должен слушать на /users и /status.
 app.use('/users', userRoutes); // Базовый путь для userRoutes теперь /users
+app.use('/api/payments', paymentRoutes); // <--- ДОБАВЛЯЕМ МАРШРУТЫ ДЛЯ ПЛАТЕЖЕЙ
 
 // Базовый маршрут для проверки, что Express-сервер работает
 app.get('/status', (req, res) => {
