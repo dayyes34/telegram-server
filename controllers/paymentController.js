@@ -115,7 +115,6 @@ bot.on('pre_checkout_query', async (preCheckoutQuery) => {
   console.log(`Получен pre_checkout_query от пользователя ${userId} для заказа ${invoicePayload}. Сумма: ${totalAmount} ${currency}. Query ID: ${queryId}`);
 
   // Извлекаем bundleId из payload
-  // Пример payload: `bundle_purchase_${bundleId}_user_${userId}_${Date.now()}`
   const payloadParts = invoicePayload.split('_');
   const bundleIdFromPayload = payloadParts.length > 2 ? payloadParts[2] : null;
 
@@ -126,7 +125,6 @@ bot.on('pre_checkout_query', async (preCheckoutQuery) => {
   }
 
   try {
-    // Получаем актуальные детали бандла с вашего основного API для проверки
     const bundleResponse = await fetch(`${MAIN_API_BASE_URL}/bundles/${bundleIdFromPayload}/details`);
     if (!bundleResponse.ok) {
       const errorData = await bundleResponse.json().catch(() => ({ message: 'Не удалось проверить товар' }));
@@ -136,7 +134,6 @@ bot.on('pre_checkout_query', async (preCheckoutQuery) => {
     }
     const bundleDetails = await bundleResponse.json();
 
-    // ПРОВЕРКА: Сумма и валюта из preCheckoutQuery должны совпадать с актуальными данными бандла
     if (bundleDetails.price_in_smallest_unit !== totalAmount || bundleDetails.currency.toUpperCase() !== currency.toUpperCase()) {
       console.warn(`PreCheckout: Несоответствие цены/валюты для бандла ${bundleIdFromPayload}.`);
       console.warn(`  Ожидалось: ${bundleDetails.price_in_smallest_unit} ${bundleDetails.currency}, Получено от TG: ${totalAmount} ${currency}`);
@@ -144,62 +141,102 @@ bot.on('pre_checkout_query', async (preCheckoutQuery) => {
       return;
     }
 
-    // Дополнительные проверки (например, доступен ли товар и т.д.) можно добавить здесь
-
     await bot.answerPreCheckoutQuery(queryId, true);
     console.log(`Успешно ответили на pre_checkout_query (ID: ${queryId}) для бандла ${bundleIdFromPayload}.`);
 
   } catch (error) {
     console.error(`PreCheckout: Ошибка при проверке бандла ${bundleIdFromPayload}:`, error);
-    // Не отвечаем false, если была ошибка связи, чтобы Telegram мог повторить
-    // Однако, если ошибка критическая и мы не хотим разрешать платеж, можно ответить false.
-    // По умолчанию, если мы здесь, лучше не отвечать, чтобы избежать двойного списания при повторе.
-    // Но если это ошибка валидации с нашей стороны, то false.
-    // Для простоты, если есть ошибка, то не отвечаем, давая Telegram решить.
+    // Не отвечаем, чтобы Telegram мог повторить, если это ошибка связи.
+    // Если это ошибка нашей валидации, то false.
   }
 });
 
 // Обработчик успешного платежа (SuccessfulPayment)
 bot.on('successful_payment', async (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const { currency, total_amount, invoice_payload, telegram_payment_charge_id, provider_payment_charge_id } = msg.successful_payment;
+  const chatId = msg.chat.id; // ID чата, где произошла оплата (нужен для отправки сообщения)
+  const userId = msg.from.id;  // Telegram User ID плательщика
+  const { 
+    currency, 
+    total_amount, 
+    invoice_payload, 
+    telegram_payment_charge_id, 
+    provider_payment_charge_id 
+  } = msg.successful_payment;
 
   console.log(`Успешный платеж от пользователя ${userId} (чат ${chatId})`);
   console.log(`  Payload: ${invoice_payload}`);
-  console.log(`  Сумма: ${total_amount / 100} ${currency}`);
+  console.log(`  Сумма: ${total_amount / 100} ${currency}`); // total_amount в копейках
   console.log(`  Telegram Payment Charge ID: ${telegram_payment_charge_id}`);
   console.log(`  Provider Payment Charge ID: ${provider_payment_charge_id}`);
 
+  // Извлекаем bundleId из payload
+  // Payload: `bundle_purchase_${bundleId}_user_${originalUserId}_${Date.now()}`
+  // Нам нужен bundleId
   const payloadParts = invoice_payload.split('_');
-  const purchasedBundleId = payloadParts.length > 2 ? payloadParts[2] : null;
+  const purchasedBundleId = payloadParts.length > 2 ? payloadParts[2] : null; // bundleId должен быть третьим элементом
 
-  let bundleTitle = purchasedBundleId || 'купленный товар';
+  let bundleTitleForMessage = purchasedBundleId || 'купленный товар';
+
   if (purchasedBundleId) {
+    // Получаем название бандла для сообщения пользователю (не критично, если не получится)
     try {
-      const bundleResponse = await fetch(`${MAIN_API_BASE_URL}/bundles/${purchasedBundleId}/details`);
-      if (bundleResponse.ok) {
-        const bundleDetails = await bundleResponse.json();
-        bundleTitle = bundleDetails.title || bundleTitle;
+      const bundleDetailsResponse = await fetch(`${MAIN_API_BASE_URL}/bundles/${purchasedBundleId}/details`);
+      if (bundleDetailsResponse.ok) {
+        const bundleDetails = await bundleDetailsResponse.json();
+        bundleTitleForMessage = bundleDetails.title || bundleTitleForMessage;
       }
     } catch (fetchError) {
       console.warn(`SuccessfulPayment: Не удалось получить название бандла ${purchasedBundleId} для сообщения. Ошибка: ${fetchError.message}`);
     }
+
+    // --- РЕГИСТРАЦИЯ ПОКУПКИ НА ОСНОВНОМ СЕРВЕРЕ ---
+    try {
+      const grantAccessResponse = await fetch(`${MAIN_API_BASE_URL}/users/${userId}/grant-bundle-access`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Если ваш основной API требует аутентификации для этого эндпоинта, добавьте заголовок Authorization
+          // 'Authorization': `Bearer ${process.env.YOUR_MAIN_API_INTERNAL_TOKEN}` 
+        },
+        body: JSON.stringify({
+          bundleId: purchasedBundleId,
+          telegramPaymentChargeId: telegram_payment_charge_id,
+          providerPaymentChargeId: provider_payment_charge_id,
+        }),
+      });
+
+      if (grantAccessResponse.ok) {
+        const grantResult = await grantAccessResponse.json();
+        console.log(`SuccessfulPayment: Доступ к бандлу ${purchasedBundleId} для пользователя ${userId} успешно зарегистрирован на основном сервере.`, grantResult.message);
+      } else {
+        // Если основной сервер вернул ошибку (например, бандл уже куплен или другая ошибка)
+        const errorResult = await grantAccessResponse.json().catch(() => ({ message: grantAccessResponse.statusText }));
+        console.error(`SuccessfulPayment: Ошибка при регистрации покупки бандла ${purchasedBundleId} для пользователя ${userId} на основном сервере. Статус: ${grantAccessResponse.status}. Ответ:`, errorResult.message);
+        // В этой ситуации платеж в Telegram прошел. Нужно решить, что делать.
+        // Можно попробовать отправить администратору уведомление, или пометить для ручной проверки.
+        // Пока просто логируем.
+      }
+    } catch (error) {
+      console.error(`SuccessfulPayment: Сетевая ошибка или ошибка JSON при попытке зарегистрировать покупку бандла ${purchasedBundleId} для ${userId} на основном сервере:`, error);
+      // Также критическая ситуация, так как платеж прошел, а доступ не предоставлен.
+    }
+    // --- КОНЕЦ РЕГИСТРАЦИИ ПОКУПКИ ---
+
+  } else {
+    console.error('SuccessfulPayment: Не удалось извлечь purchasedBundleId из payload:', invoice_payload);
+    // Отправляем общее сообщение, так как не знаем, что было куплено
+    bundleTitleForMessage = 'ваш заказ';
   }
 
+  // Отправляем сообщение пользователю о успешной покупке
   try {
     await bot.sendMessage(chatId, 
-      `Спасибо за покупку "${bundleTitle}"!
+      `Спасибо за покупку "${bundleTitleForMessage}"!
 
 Сумма: ${total_amount / 100} ${currency}.
-Доступ к материалам предоставлен. Вы можете найти их в разделе "Моя Коллекция" или "База Барабанщика" в приложении.`
-    );
-    console.log(`Сообщение об успешной покупке бандла ${purchasedBundleId} отправлено пользователю ${userId}.`);
-    
-    // !!! ВАЖНО: Здесь должна быть логика предоставления доступа к бандлу в вашей БД !!!
-    // Например, на вашем "основном сервере" может быть API для отметки, что пользователь ${userId} купил ${purchasedBundleId}
-    // await fetch(`${MAIN_API_BASE_URL}/user/${userId}/grant-bundle-access`, { method: 'POST', body: JSON.stringify({ bundleId: purchasedBundleId }) });
-
+Доступ к материалам предоставлен. Вы можете найти их в соответствующем разделе приложения.`
+    ); // Сообщение немного изменено для универсальности
+    console.log(`Сообщение об успешной покупке ("${bundleTitleForMessage}") отправлено пользователю ${userId} в чат ${chatId}.`);
   } catch (error) {
     console.error(`Ошибка при отправке сообщения об успешной покупке пользователю ${userId}:`, error);
   }
