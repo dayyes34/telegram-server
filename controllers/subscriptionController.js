@@ -279,7 +279,7 @@ exports.checkSubscriptionStatus = async (req, res) => {
       userId,
       status: 'active',
       endDate: { $gte: new Date() }
-    });
+    }).populate('planId');
     
     const hasActiveSubscription = !!subscription;
     
