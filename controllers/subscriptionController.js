@@ -75,28 +75,29 @@ exports.createPaymentLink = async (req, res) => {
     
     try {
       // Создаем ссылку на оплату через Telegram
-      const paymentLink = await bot.createInvoiceLink({
-        title: invoiceTitle,
-        description: invoiceDescription,
+      const paymentLink = await bot.createInvoiceLink(
+        invoiceTitle,
+        invoiceDescription,
         payload,
-        provider_token: process.env.TELEGRAM_PAYMENT_TOKEN,
-        currency: plan.currency,
-        prices: [{
+        process.env.TELEGRAM_PAYMENT_TOKEN,
+        plan.currency,
+        [{
           label: plan.name,
           amount: plan.price // в копейках
         }],
-        // необязательные поля для настройки счета
-        need_name: false,
-        need_phone_number: false,
-        need_email: false,
-        need_shipping_address: false,
-        is_flexible: false,
-        send_phone_number_to_provider: false,
-        send_email_to_provider: false,
-        photo_url: process.env.SUBSCRIPTION_IMAGE_URL || null,
-        max_tip_amount: 0,
-        suggested_tip_amounts: []
-      });
+        {
+          need_name: false,
+          need_phone_number: false,
+          need_email: false,
+          need_shipping_address: false,
+          is_flexible: false,
+          send_phone_number_to_provider: false,
+          send_email_to_provider: false,
+          photo_url: process.env.SUBSCRIPTION_IMAGE_URL || null,
+          max_tip_amount: 0,
+          suggested_tip_amounts: []
+        }
+      );
 
       res.status(200).json({ paymentLink });
     } catch (botError) {
