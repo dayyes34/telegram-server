@@ -73,13 +73,15 @@ exports.createPaymentLink = async (req, res) => {
     const invoiceDescription = `${plan.description}. Длительность: ${plan.duration} дней.`;
     const payload = `subscription_${planId}_${userId}_${Date.now()}`;
     
+    console.log("DEBUG: TELEGRAM_PAYMENT_TOKEN value is:", process.env.TELEGRAM_TEST_PROVIDER_TOKEN); // Добавим лог для проверки
+
     try {
       // Создаем ссылку на оплату через Telegram
       const paymentLink = await bot.createInvoiceLink(
         invoiceTitle,
         invoiceDescription,
         payload,
-        process.env.TELEGRAM_PAYMENT_TOKEN,
+        process.env.TELEGRAM_TEST_PROVIDER_TOKEN,
         plan.currency,
         [{
           label: plan.name,
