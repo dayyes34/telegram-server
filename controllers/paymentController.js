@@ -1,5 +1,8 @@
 require('dotenv').config();
 const bot = require('../config/telegramBot');
+const User = require('../models/User'); // Добавим User
+const SubscriptionPlan = require('../models/SubscriptionPlan'); // Добавим SubscriptionPlan
+const Subscription = require('../models/Subscription'); // Добавим Subscription
 
 const TEST_PROVIDER_TOKEN = process.env.TELEGRAM_TEST_PROVIDER_TOKEN;
 const MAIN_API_BASE_URL = process.env.MAIN_API_BASE_URL || 'https://rhythmcapsule.ru/api'; // URL вашего основного API
@@ -109,56 +112,104 @@ const createInvoice = async (req, res) => {
 // Вы должны ответить в течение 10 секунд.
 bot.on('pre_checkout_query', async (preCheckoutQuery) => {
   const queryId = preCheckoutQuery.id;
-  const userId = preCheckoutQuery.from.id;
+  const userIdFromQuery = preCheckoutQuery.from.id; // Это telegramId пользователя
   const invoicePayload = preCheckoutQuery.invoice_payload;
-  const totalAmount = preCheckoutQuery.total_amount; // Сумма в копейках от Telegram
-  const currency = preCheckoutQuery.currency; // Валюта от Telegram
-  const fetch = (await import('node-fetch')).default; // Динамический импорт
+  const totalAmount = preCheckoutQuery.total_amount;
+  const currency = preCheckoutQuery.currency;
+  const fetch = (await import('node-fetch')).default; 
 
-  console.log(`Получен pre_checkout_query от пользователя ${userId} для заказа ${invoicePayload}. Сумма: ${totalAmount} ${currency}. Query ID: ${queryId}`);
+  console.log(`Получен pre_checkout_query от пользователя ${userIdFromQuery} для заказа ${invoicePayload}. Сумма: ${totalAmount} ${currency}. Query ID: ${queryId}`);
 
-  // Извлекаем bundleId из payload
   const payloadParts = invoicePayload.split('_');
-  const bundleIdFromPayload = payloadParts.length > 2 ? payloadParts[2] : null;
+  const type = payloadParts[0]; // 'subscription' или 'bundle'
 
-  if (!bundleIdFromPayload) {
-    console.error('Не удалось извлечь bundleId из preCheckoutQuery payload:', invoicePayload);
-    await bot.answerPreCheckoutQuery(queryId, false, { error_message: 'Ошибка обработки заказа.' });
-    return;
-  }
+  if (type === 'subscription') {
+    // Логика для подписок
+    // payload: subscription_planId_dbUserId_timestamp
+    const planId = payloadParts[1];
+    // const dbUserId = payloadParts[2]; // userId из нашей БД, если мы его туда клали
 
-  try {
-    const bundleResponse = await fetch(`${MAIN_API_BASE_URL}/bundles/${bundleIdFromPayload}/details`);
-    if (!bundleResponse.ok) {
-      const errorData = await bundleResponse.json().catch(() => ({ message: 'Не удалось проверить товар' }));
-      console.error(`PreCheckout: Ошибка при получении деталей бандла ${bundleIdFromPayload} с основного API: ${bundleResponse.status}`, errorData.message);
-      await bot.answerPreCheckoutQuery(queryId, false, { error_message: errorData.message });
-      return;
-    }
-    const bundleDetails = await bundleResponse.json();
-
-    if (bundleDetails.price_in_smallest_unit !== totalAmount || bundleDetails.currency.toUpperCase() !== currency.toUpperCase()) {
-      console.warn(`PreCheckout: Несоответствие цены/валюты для бандла ${bundleIdFromPayload}.`);
-      console.warn(`  Ожидалось: ${bundleDetails.price_in_smallest_unit} ${bundleDetails.currency}, Получено от TG: ${totalAmount} ${currency}`);
-      await bot.answerPreCheckoutQuery(queryId, false, { error_message: 'Цена или валюта товара изменились. Пожалуйста, попробуйте снова.' });
+    if (!planId) {
+      console.error('PreCheckout (Subscription): Не удалось извлечь planId из payload:', invoicePayload);
+      await bot.answerPreCheckoutQuery(queryId, false, { error_message: 'Ошибка обработки заказа (подписка).' });
       return;
     }
 
-    await bot.answerPreCheckoutQuery(queryId, true);
-    console.log(`Успешно ответили на pre_checkout_query (ID: ${queryId}) для бандла ${bundleIdFromPayload}.`);
+    try {
+      const plan = await SubscriptionPlan.findById(planId);
+      if (!plan) {
+        console.error(`PreCheckout (Subscription): План подписки ${planId} не найден.`);
+        await bot.answerPreCheckoutQuery(queryId, false, { error_message: 'Выбранный план подписки больше не доступен.' });
+        return;
+      }
+      if (!plan.isActive) {
+        console.error(`PreCheckout (Subscription): План подписки ${planId} не активен.`);
+        await bot.answerPreCheckoutQuery(queryId, false, { error_message: 'Этот план подписки временно недоступен.' });
+        return;
+      }
+      // Проверка цены и валюты
+      if (plan.price !== totalAmount || plan.currency.toUpperCase() !== currency.toUpperCase()) {
+        console.warn(`PreCheckout (Subscription): Несоответствие цены/валюты для плана ${planId}.`);
+        console.warn(`  Ожидалось: ${plan.price} ${plan.currency}, Получено от TG: ${totalAmount} ${currency}`);
+        await bot.answerPreCheckoutQuery(queryId, false, { error_message: 'Цена или валюта подписки изменились. Пожалуйста, попробуйте снова.' });
+        return;
+      }
 
-  } catch (error) {
-    console.error(`PreCheckout: Ошибка при проверке бандла ${bundleIdFromPayload}:`, error);
-    // Не отвечаем, чтобы Telegram мог повторить, если это ошибка связи.
-    // Если это ошибка нашей валидации, то false.
+      await bot.answerPreCheckoutQuery(queryId, true);
+      console.log(`Успешно ответили на pre_checkout_query (ID: ${queryId}) для подписки на план ${planId}.`);
+
+    } catch (error) {
+      console.error(`PreCheckout (Subscription): Ошибка при проверке плана ${planId}:`, error);
+      await bot.answerPreCheckoutQuery(queryId, false, { error_message: 'Внутренняя ошибка сервера при проверке подписки.' });
+    }
+
+  } else if (type === 'bundle') { // Предполагаем, что старый payload был bundle_purchase_...
+    // Логика для бандлов (существующая)
+    const bundleIdFromPayload = payloadParts.length > 2 ? payloadParts[2] : null; // bundleId был третьим элементом bundle_purchase_BUNDLEID_user_USERID_...
+
+    if (!bundleIdFromPayload) {
+      console.error('PreCheckout (Bundle): Не удалось извлечь bundleId из payload:', invoicePayload);
+      await bot.answerPreCheckoutQuery(queryId, false, { error_message: 'Ошибка обработки заказа (бандл).' });
+      return;
+    }
+    try {
+      const bundleResponse = await fetch(`${MAIN_API_BASE_URL}/bundles/${bundleIdFromPayload}/details`);
+      if (!bundleResponse.ok) {
+        const errorData = await bundleResponse.json().catch(() => ({ message: 'Не удалось проверить товар' }));
+        console.error(`PreCheckout (Bundle): Ошибка при получении деталей бандла ${bundleIdFromPayload} с основного API: ${bundleResponse.status}`, errorData.message);
+        await bot.answerPreCheckoutQuery(queryId, false, { error_message: errorData.message });
+        return;
+      }
+      const bundleDetails = await bundleResponse.json();
+
+      if (bundleDetails.price_in_smallest_unit !== totalAmount || bundleDetails.currency.toUpperCase() !== currency.toUpperCase()) {
+        console.warn(`PreCheckout (Bundle): Несоответствие цены/валюты для бандла ${bundleIdFromPayload}.`);
+        console.warn(`  Ожидалось: ${bundleDetails.price_in_smallest_unit} ${bundleDetails.currency}, Получено от TG: ${totalAmount} ${currency}`);
+        await bot.answerPreCheckoutQuery(queryId, false, { error_message: 'Цена или валюта товара изменились. Пожалуйста, попробуйте снова.' });
+        return;
+      }
+
+      await bot.answerPreCheckoutQuery(queryId, true);
+      console.log(`Успешно ответили на pre_checkout_query (ID: ${queryId}) для бандла ${bundleIdFromPayload}.`);
+
+    } catch (error) {
+      console.error(`PreCheckout (Bundle): Ошибка при проверке бандла ${bundleIdFromPayload}:`, error);
+      // Не отвечаем, чтобы Telegram мог повторить, если это ошибка связи.
+      // Если это ошибка нашей валидации, то false.
+      // Лучше ответить false, чтобы не было зависаний на стороне пользователя
+      await bot.answerPreCheckoutQuery(queryId, false, { error_message: 'Внутренняя ошибка сервера при проверке товара.' });
+    }
+  } else {
+    console.error('PreCheckout: Неизвестный тип payload:', invoicePayload);
+    await bot.answerPreCheckoutQuery(queryId, false, { error_message: 'Неподдерживаемый тип заказа.' });
   }
 });
 
 // Обработчик успешного платежа (SuccessfulPayment)
 bot.on('successful_payment', async (msg) => {
-  const chatId = msg.chat.id; // ID чата, где произошла оплата (нужен для отправки сообщения)
-  const userId = msg.from.id;  // Telegram User ID плательщика
-  const fetch = (await import('node-fetch')).default; // Динамический импорт
+  const chatId = msg.chat.id; 
+  const telegramUserId = msg.from.id;  
+  const fetch = (await import('node-fetch')).default; 
   const { 
     currency, 
     total_amount, 
@@ -167,85 +218,140 @@ bot.on('successful_payment', async (msg) => {
     provider_payment_charge_id 
   } = msg.successful_payment;
 
-  console.log(`Успешный платеж от пользователя ${userId} (чат ${chatId})`);
+  console.log(`Успешный платеж от пользователя ${telegramUserId} (чат ${chatId})`);
   console.log(`  Payload: ${invoice_payload}`);
-  console.log(`  Сумма: ${total_amount / 100} ${currency}`); // total_amount в копейках
+  console.log(`  Сумма: ${total_amount / 100} ${currency}`);
   console.log(`  Telegram Payment Charge ID: ${telegram_payment_charge_id}`);
   console.log(`  Provider Payment Charge ID: ${provider_payment_charge_id}`);
 
-  // Извлекаем bundleId из payload
-  // Payload: `bundle_purchase_${bundleId}_user_${originalUserId}_${Date.now()}`
-  // Нам нужен bundleId
   const payloadParts = invoice_payload.split('_');
-  const purchasedBundleId = payloadParts.length > 2 ? payloadParts[2] : null; // bundleId должен быть третьим элементом
+  const type = payloadParts[0];
 
-  let bundleTitleForMessage = purchasedBundleId || 'купленный товар';
+  if (type === 'subscription') {
+    // Логика для подписок
+    // payload: subscription_planId_dbUserId_timestamp
+    const planId = payloadParts[1];
+    const dbUserId = payloadParts[2]; // ID пользователя из нашей MongoDB
 
-  if (purchasedBundleId) {
-    // Получаем название бандла для сообщения пользователю (не критично, если не получится)
     try {
-      const bundleDetailsResponse = await fetch(`${MAIN_API_BASE_URL}/bundles/${purchasedBundleId}/details`);
-      if (bundleDetailsResponse.ok) {
-        const bundleDetails = await bundleDetailsResponse.json();
-        bundleTitleForMessage = bundleDetails.title || bundleTitleForMessage;
+      const plan = await SubscriptionPlan.findById(planId);
+      const user = await User.findById(dbUserId);
+
+      if (!plan || !user) {
+        console.error(`SuccessfulPayment (Subscription): План ${planId} или пользователь ${dbUserId} не найдены.`);
+        // Тут сложно что-то сделать, платеж уже прошел. Логируем и возможно шлем алерт админу.
+        await bot.sendMessage(telegramUserId, 'Произошла ошибка при активации вашей подписки. Пожалуйста, свяжитесь с поддержкой.');
+        return;
       }
-    } catch (fetchError) {
-      console.warn(`SuccessfulPayment: Не удалось получить название бандла ${purchasedBundleId} для сообщения. Ошибка: ${fetchError.message}`);
-    }
 
-    // --- РЕГИСТРАЦИЯ ПОКУПКИ НА ОСНОВНОМ СЕРВЕРЕ ---
-    try {
-      const grantAccessResponse = await fetch(`${MAIN_API_BASE_URL}/users/${userId}/grant-bundle-access`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Если ваш основной API требует аутентификации для этого эндпоинта, добавьте заголовок Authorization
-          // 'Authorization': `Bearer ${process.env.YOUR_MAIN_API_INTERNAL_TOKEN}` 
-        },
-        body: JSON.stringify({
-          bundleId: purchasedBundleId,
-          telegramPaymentChargeId: telegram_payment_charge_id,
-          providerPaymentChargeId: provider_payment_charge_id,
-        }),
+      const startDate = new Date();
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + plan.duration);
+
+      const subscription = new Subscription({
+        userId: user._id,
+        telegramUserId: user.telegramId, // Убедимся, что telegramId пользователя есть
+        planId: plan._id,
+        status: 'active',
+        startDate,
+        endDate,
+        autoRenew: false, 
+        paymentHistory: [{
+          amount: total_amount,
+          currency,
+          telegramPaymentId: telegram_payment_charge_id,
+          providerPaymentId: provider_payment_charge_id, // Добавим ID от провайдера
+          status: 'completed',
+          paymentDate: new Date()
+        }]
       });
 
-      if (grantAccessResponse.ok) {
-        const grantResult = await grantAccessResponse.json();
-        console.log(`SuccessfulPayment: Доступ к бандлу ${purchasedBundleId} для пользователя ${userId} успешно зарегистрирован на основном сервере.`, grantResult.message);
-      } else {
-        // Если основной сервер вернул ошибку (например, бандл уже куплен или другая ошибка)
-        const errorResult = await grantAccessResponse.json().catch(() => ({ message: grantAccessResponse.statusText }));
-        console.error(`SuccessfulPayment: Ошибка при регистрации покупки бандла ${purchasedBundleId} для пользователя ${userId} на основном сервере. Статус: ${grantAccessResponse.status}. Ответ:`, errorResult.message);
-        // В этой ситуации платеж в Telegram прошел. Нужно решить, что делать.
-        // Можно попробовать отправить администратору уведомление, или пометить для ручной проверки.
-        // Пока просто логируем.
-      }
+      await subscription.save();
+
+      user.subscriptions.push(subscription._id);
+      user.currentSubscriptionId = subscription._id;
+      user.hasActiveSubscription = true;
+      await user.save();
+
+      await bot.sendMessage(
+        user.telegramId,
+        `🎉 Поздравляем! Вы успешно оформили подписку "${plan.name}".\n\nВаша подписка действует до ${endDate.toLocaleDateString()}.
+Спасибо за поддержку!`
+      );
+      console.log(`SuccessfulPayment (Subscription): Подписка ${plan.name} для пользователя ${user.telegramId} (ID: ${user._id}) успешно создана и активирована.`);
+
     } catch (error) {
-      console.error(`SuccessfulPayment: Сетевая ошибка или ошибка JSON при попытке зарегистрировать покупку бандла ${purchasedBundleId} для ${userId} на основном сервере:`, error);
-      // Также критическая ситуация, так как платеж прошел, а доступ не предоставлен.
+      console.error(`SuccessfulPayment (Subscription): Ошибка при создании подписки для payload ${invoice_payload}:`, error);
+      // Платеж прошел, но не смогли обновить БД. Критично.
+      // Отправляем сообщение пользователю и лог админу.
+      try {
+        await bot.sendMessage(telegramUserId, 'Платеж за подписку прошел, но произошла ошибка при ее активации. Мы уже разбираемся. Пожалуйста, свяжитесь с поддержкой, если подписка не появится в ближайшее время.');
+      } catch (sendError) {
+        console.error('Failed to send error message to user about subscription activation failure', sendError);
+      }
     }
-    // --- КОНЕЦ РЕГИСТРАЦИИ ПОКУПКИ ---
 
+  } else if (type === 'bundle') {
+    // Логика для бандлов (существующая)
+    const purchasedBundleId = payloadParts.length > 2 ? payloadParts[2] : null;
+    let bundleTitleForMessage = purchasedBundleId || 'купленный товар';
+
+    if (purchasedBundleId) {
+      try {
+        const bundleDetailsResponse = await fetch(`${MAIN_API_BASE_URL}/bundles/${purchasedBundleId}/details`);
+        if (bundleDetailsResponse.ok) {
+          const bundleDetails = await bundleDetailsResponse.json();
+          bundleTitleForMessage = bundleDetails.title || bundleTitleForMessage;
+        }
+      } catch (fetchError) {
+        console.warn(`SuccessfulPayment (Bundle): Не удалось получить название бандла ${purchasedBundleId} для сообщения. Ошибка: ${fetchError.message}`);
+      }
+
+      try {
+        const grantAccessResponse = await fetch(`${MAIN_API_BASE_URL}/users/${telegramUserId}/grant-bundle-access`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bundleId: purchasedBundleId,
+            telegramPaymentChargeId: telegram_payment_charge_id,
+            providerPaymentChargeId: provider_payment_charge_id,
+          }),
+        });
+
+        if (grantAccessResponse.ok) {
+          const grantResult = await grantAccessResponse.json();
+          console.log(`SuccessfulPayment (Bundle): Доступ к бандлу ${purchasedBundleId} для пользователя ${telegramUserId} успешно зарегистрирован на основном сервере.`, grantResult.message);
+        } else {
+          const errorResult = await grantAccessResponse.json().catch(() => ({ message: grantAccessResponse.statusText }));
+          console.error(`SuccessfulPayment (Bundle): Ошибка при регистрации покупки бандла ${purchasedBundleId} для пользователя ${telegramUserId} на основном сервере. Статус: ${grantAccessResponse.status}. Ответ:`, errorResult.message);
+        }
+      } catch (error) {
+        console.error(`SuccessfulPayment (Bundle): Сетевая ошибка или ошибка JSON при попытке зарегистрировать покупку бандла ${purchasedBundleId} для ${telegramUserId} на основном сервере:`, error);
+      }
+    } else {
+      console.error('SuccessfulPayment (Bundle): Не удалось извлечь purchasedBundleId из payload:', invoice_payload);
+      bundleTitleForMessage = 'ваш заказ';
+    }
+
+    try {
+      await bot.sendMessage(chatId, 
+        `Спасибо за покупку "${bundleTitleForMessage}"!\n\nСумма: ${total_amount / 100} ${currency}.\nДоступ к материалам предоставлен. Вы можете найти их в соответствующем разделе приложения.`
+      );
+      console.log(`Сообщение об успешной покупке ("${bundleTitleForMessage}") отправлено пользователю ${telegramUserId} в чат ${chatId}.`);
+    } catch (error) {
+      console.error(`Ошибка при отправке сообщения об успешной покупке пользователю ${telegramUserId}:`, error);
+    }
   } else {
-    console.error('SuccessfulPayment: Не удалось извлечь purchasedBundleId из payload:', invoice_payload);
-    // Отправляем общее сообщение, так как не знаем, что было куплено
-    bundleTitleForMessage = 'ваш заказ';
-  }
-
-  // Отправляем сообщение пользователю о успешной покупке
-  try {
-    await bot.sendMessage(chatId, 
-      `Спасибо за покупку "${bundleTitleForMessage}"!
-
-Сумма: ${total_amount / 100} ${currency}.
-Доступ к материалам предоставлен. Вы можете найти их в соответствующем разделе приложения.`
-    ); // Сообщение немного изменено для универсальности
-    console.log(`Сообщение об успешной покупке ("${bundleTitleForMessage}") отправлено пользователю ${userId} в чат ${chatId}.`);
-  } catch (error) {
-    console.error(`Ошибка при отправке сообщения об успешной покупке пользователю ${userId}:`, error);
+    console.error('SuccessfulPayment: Неизвестный тип payload:', invoice_payload);
+    try {
+       await bot.sendMessage(telegramUserId, 'Ваш платеж прошел успешно, но мы не смогли определить тип покупки. Пожалуйста, свяжитесь с поддержкой.');
+    } catch (sendError) {
+      console.error('Failed to send error message to user about unknown purchase type', sendError);
+    }
   }
 });
 
 module.exports = {
   createInvoice,
+  // handlePaymentWebhook теперь не нужен, если вся логика в bot.on()
 }; 
