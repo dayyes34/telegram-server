@@ -5,7 +5,8 @@
   "main": "bot/telegramBot.js",
   "scripts": {
     "start": "node bot/telegramBot.js",
-    "dev": "nodemon bot/telegramBot.js",
+    "seed-plans": "node scripts/seed-subscription-plans.js",
+    "dev": "npm run seed-plans && nodemon bot/telegramBot.js",
     "check-subscriptions": "node scripts/subscription-checker.js"
   },
   "dependencies": {
