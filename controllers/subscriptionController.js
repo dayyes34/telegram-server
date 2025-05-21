@@ -34,7 +34,7 @@ exports.getPlanById = async (req, res) => {
 // Получение подписок пользователя
 exports.getUserSubscriptions = async (req, res) => {
   try {
-    const userId = req.user._id; // из middleware авторизации
+    const userId = req.userId; // Используем req.userId из authMiddleware
     
     const subscriptions = await Subscription.find({ userId })
                                            .populate('planId')
@@ -55,8 +55,8 @@ exports.createPaymentLink = async (req, res) => {
       return res.status(400).json({ message: 'Не указан ID плана подписки' });
     }
 
-    const userId = req.user._id;
-    const telegramUserId = req.user.telegramId;
+    const userId = req.userId; // Используем req.userId из authMiddleware
+    const telegramUserId = req.telegramId; // Используем req.telegramId из authMiddleware
 
     // Получаем информацию о плане
     const plan = await SubscriptionPlan.findById(planId);
@@ -209,7 +209,7 @@ exports.handlePaymentWebhook = async (req, res) => {
 // Получение текущей активной подписки пользователя
 exports.getCurrentSubscription = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.userId; // Используем req.userId из authMiddleware
     
     // Находим текущую подписку пользователя
     const subscription = await Subscription.findOne({
@@ -232,7 +232,7 @@ exports.getCurrentSubscription = async (req, res) => {
 // Отмена автопродления подписки
 exports.cancelAutoRenew = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.userId; // Используем req.userId из authMiddleware
     const subscriptionId = req.params.id;
     
     const subscription = await Subscription.findOne({ _id: subscriptionId, userId });
@@ -254,7 +254,7 @@ exports.cancelAutoRenew = async (req, res) => {
 // Проверка наличия активной подписки
 exports.checkSubscriptionStatus = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.userId; // Используем req.userId из authMiddleware
     
     const subscription = await Subscription.findOne({
       userId,
