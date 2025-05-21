@@ -69,8 +69,8 @@ exports.createPaymentLink = async (req, res) => {
     }
 
     // Формируем инвойс для оплаты через Telegram
-    const invoiceTitle = `Подписка: ${plan.name}`;
-    const invoiceDescription = `${plan.description}. Длительность: ${plan.duration} дней.`;
+    const invoiceTitle = "Test Subscription"; // Временный простой title
+    const invoiceDescription = "Test subscription description."; // Временный простой description
     const payload = `subscription_${planId}_${userId}_${Date.now()}`;
     
     console.log("DEBUG: TELEGRAM_TEST_PROVIDER_TOKEN value is:", process.env.TELEGRAM_TEST_PROVIDER_TOKEN);
@@ -83,8 +83,8 @@ exports.createPaymentLink = async (req, res) => {
         provider_token: process.env.TELEGRAM_TEST_PROVIDER_TOKEN,
         currency: plan.currency,
         prices: [{
-          label: plan.name,
-          amount: plan.price // в копейках
+          label: "Test Label", // Временный простой label
+          amount: plan.price // Оставляем оригинальную цену
         }],
         options: { // Сгруппируем опциональные параметры для лога
           need_name: false,
@@ -107,12 +107,12 @@ exports.createPaymentLink = async (req, res) => {
         invoiceDescription,
         payload,
         process.env.TELEGRAM_TEST_PROVIDER_TOKEN, 
-        plan.currency,
+        plan.currency, // Оставляем оригинальную валюту
         [{
-          label: plan.name,
-          amount: plan.price // в копейках
+          label: "Test Label", // Временный простой label
+          amount: plan.price // Оставляем оригинальную цену
         }],
-        {} // Передаем пустой объект опций для проверки
+        {} // Передаем пустой объект опций
       );
 
       console.log("DEBUG: Generated paymentLink:", paymentLink);
