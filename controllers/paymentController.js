@@ -63,6 +63,8 @@ const createInvoice = async (req, res) => {
     // start_parameter: `bundle_${bundleId}` // Можно использовать для deeplink, если нужно
   };
 
+  console.log("DEBUG (paymentController): Arguments for createInvoiceLink:", JSON.stringify(invoiceParams, null, 2)); // Добавляем лог
+
   try {
     // Создаем ссылку на инвойс вместо прямой отправки
     const invoiceLink = await bot.createInvoiceLink(
@@ -111,6 +113,7 @@ bot.on('pre_checkout_query', async (preCheckoutQuery) => {
   const invoicePayload = preCheckoutQuery.invoice_payload;
   const totalAmount = preCheckoutQuery.total_amount; // Сумма в копейках от Telegram
   const currency = preCheckoutQuery.currency; // Валюта от Telegram
+  const fetch = (await import('node-fetch')).default; // Динамический импорт
 
   console.log(`Получен pre_checkout_query от пользователя ${userId} для заказа ${invoicePayload}. Сумма: ${totalAmount} ${currency}. Query ID: ${queryId}`);
 
@@ -155,6 +158,7 @@ bot.on('pre_checkout_query', async (preCheckoutQuery) => {
 bot.on('successful_payment', async (msg) => {
   const chatId = msg.chat.id; // ID чата, где произошла оплата (нужен для отправки сообщения)
   const userId = msg.from.id;  // Telegram User ID плательщика
+  const fetch = (await import('node-fetch')).default; // Динамический импорт
   const { 
     currency, 
     total_amount, 
