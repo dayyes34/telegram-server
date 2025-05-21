@@ -1,5 +1,4 @@
 require('dotenv').config();
-const fetch = require('node-fetch'); // Или используйте import fetch from 'node-fetch'; если у вас ES Modules
 const bot = require('../config/telegramBot');
 
 const TEST_PROVIDER_TOKEN = process.env.TELEGRAM_TEST_PROVIDER_TOKEN;
@@ -10,6 +9,7 @@ const MAIN_API_BASE_URL = process.env.MAIN_API_BASE_URL || 'https://rhythmcapsul
 
 const createInvoice = async (req, res) => {
   const { bundleId, userId } = req.body;
+  const fetch = (await import('node-fetch')).default; // Динамический импорт
 
   if (!TEST_PROVIDER_TOKEN) {
     console.error('Тестовый токен провайдера не найден в переменных окружения!');
