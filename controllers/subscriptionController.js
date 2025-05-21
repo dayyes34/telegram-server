@@ -112,18 +112,7 @@ exports.createPaymentLink = async (req, res) => {
           label: plan.name,
           amount: plan.price // в копейках
         }],
-        {
-          need_name: false,
-          need_phone_number: false,
-          need_email: false,
-          need_shipping_address: false,
-          is_flexible: false,
-          send_phone_number_to_provider: false,
-          send_email_to_provider: false,
-          photo_url: process.env.SUBSCRIPTION_IMAGE_URL || null,
-          max_tip_amount: 0,
-          suggested_tip_amounts: []
-        }
+        {} // Передаем пустой объект опций для проверки
       );
 
       console.log("DEBUG: Generated paymentLink:", paymentLink);
