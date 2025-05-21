@@ -191,7 +191,15 @@ exports.getUserProfile = async (req, res) => {
     
     const user = await User.findById(req.userId)
                            .select('-__v')
-                           .populate('sessions', 'sessionName folderName createdAt');
+                           .populate('sessions', 'sessionName folderName createdAt')
+                           .populate({
+                             path: 'currentSubscriptionId',
+                             model: 'Subscription', // Явно указываем модель, если не указано в схеме User
+                             populate: {
+                               path: 'planId',
+                               model: 'SubscriptionPlan'
+                             }
+                           });
     
     if (!user) {
       return res.status(404).json({ message: 'Пользователь не найден' });
@@ -201,18 +209,22 @@ exports.getUserProfile = async (req, res) => {
     user.lastActivity = Date.now();
     await user.save();
     
+    const userProfileData = {
+      id: user._id,
+      telegramId: user.telegramId,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      username: user.username,
+      userLanguage: user.userLanguage,
+      registeredAt: user.registeredAt,
+      lastActivity: user.lastActivity,
+      sessions: user.sessions,
+      hasActiveSubscription: user.hasActiveSubscription,
+      currentSubscription: user.currentSubscriptionId // Переименуем для ясности на клиенте
+    };
+    
     res.status(200).json({
-      user: {
-        id: user._id,
-        telegramId: user.telegramId,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        username: user.username,
-        userLanguage: user.userLanguage,
-        registeredAt: user.registeredAt,
-        lastActivity: user.lastActivity,
-        sessions: user.sessions
-      }
+      user: userProfileData
     });
   } catch (error) {
     console.error('Ошибка при получении профиля пользователя:', error);
