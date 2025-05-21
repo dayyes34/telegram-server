@@ -5,7 +5,8 @@
   "main": "bot/telegramBot.js",
   "scripts": {
     "start": "node bot/telegramBot.js",
-    "dev": "nodemon bot/telegramBot.js"
+    "dev": "nodemon bot/telegramBot.js",
+    "check-subscriptions": "node scripts/subscription-checker.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

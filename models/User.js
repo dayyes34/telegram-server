@@ -33,7 +33,21 @@ const userSchema = new mongoose.Schema({
   sessions: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'SequencerSession'
-  }]
+  }],
+  // Добавленные поля для подписок
+  subscriptions: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Subscription'
+  }],
+  currentSubscriptionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Subscription',
+    default: null
+  },
+  hasActiveSubscription: {
+    type: Boolean,
+    default: false
+  }
 });
 
 const User = mongoose.model('User', userSchema);

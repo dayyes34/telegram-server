@@ -8,6 +8,7 @@ const User = require('../models/User'); // Ваша модель пользов�
 const SequencerSession = require('../models/SequencerSession'); // <--- ЯВНЫЙ ИМПОРТ ЗДЕСЬ
 const userRoutes = require('../routes/userRoutes'); // Ваши маршруты для API
 const paymentRoutes = require('../routes/paymentRoutes'); // <--- ДОБАВЛЯЕМ ИМПОРТ МАРШРУТОВ ПЛАТЕЖЕЙ
+const subscriptionService = require('../services/subscriptionService'); // Импорт сервиса подписок
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -56,6 +57,24 @@ app.use('/api/payments', paymentRoutes); // <--- ДОБАВЛЯЕМ МАРШРУ
 // Базовый маршрут для проверки, что Express-сервер работает
 app.get('/status', (req, res) => {
   res.json({ status: 'Telegram API server is running on backend', botInitialized: !!bot });
+});
+
+// Маршрут для ручного запуска проверки подписок (защищен API-ключом)
+app.post('/api/subscriptions/check', async (req, res) => {
+  const apiKey = req.headers['x-api-key'];
+  
+  // Проверка API-ключа (для безопасности)
+  if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
+    return res.status(401).json({ message: 'Unauthorized: Invalid API key' });
+  }
+  
+  try {
+    const result = await subscriptionService.checkSubscriptions();
+    res.json({ status: 'success', ...result });
+  } catch (error) {
+    console.error('Ошибка при ручном запуске проверки подписок:', error);
+    res.status(500).json({ status: 'error', message: error.message });
+  }
 });
 
 
@@ -196,6 +215,10 @@ app.listen(PORT, () => {
   } else {
       console.log(`Telegram бот НЕ АКТИВЕН или не был правильно инициализирован.`);
   }
+  
+  // Запуск сервиса проверки подписок
+  // Проверяем каждые 30 минут в процессе работы сервера
+  subscriptionService.startPeriodicCheck(30);
 });
 
 // Обработка необработанных ошибок (рекомендуется добавить)
