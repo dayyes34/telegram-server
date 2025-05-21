@@ -69,9 +69,9 @@ exports.createPaymentLink = async (req, res) => {
     }
 
     // Формируем инвойс для оплаты через Telegram
-    const invoiceTitle = "Test Subscription"; // Временный простой title
-    const invoiceDescription = "Test subscription description."; // Временный простой description
-    const payload = `subscription_${planId}_${userId}_${Date.now()}`;
+    const invoiceTitle = "Rhythm Like"; // Имитируем title бандла
+    const invoiceDescription = "ritmo like"; // Имитируем description бандла
+    const payload = `bundle_purchase_${planId}_${userId}_${Date.now()}`; // Имитируем payload бандла
     
     console.log("DEBUG: TELEGRAM_TEST_PROVIDER_TOKEN value is:", process.env.TELEGRAM_TEST_PROVIDER_TOKEN);
 
@@ -83,8 +83,8 @@ exports.createPaymentLink = async (req, res) => {
         provider_token: process.env.TELEGRAM_TEST_PROVIDER_TOKEN,
         currency: plan.currency,
         prices: [{
-          label: "Test Label", // Временный простой label
-          amount: plan.price // Оставляем оригинальную цену
+          label: "Rhythm Like", // Имитируем label бандла
+          amount: 5000 // Имитируем amount бандла
         }],
         options: { // Сгруппируем опциональные параметры для лога
           need_name: false,
@@ -107,12 +107,12 @@ exports.createPaymentLink = async (req, res) => {
         invoiceDescription,
         payload,
         process.env.TELEGRAM_TEST_PROVIDER_TOKEN, 
-        plan.currency, // Оставляем оригинальную валюту
+        plan.currency, // Оставляем RUB
         [{
-          label: "Test Label", // Временный простой label
-          amount: plan.price // Оставляем оригинальную цену
+          label: "Rhythm Like", // Имитируем label бандла
+          amount: 5000 // Имитируем amount бандла
         }],
-        {} // Передаем пустой объект опций
+        {} 
       );
 
       console.log("DEBUG: Generated paymentLink:", paymentLink);
