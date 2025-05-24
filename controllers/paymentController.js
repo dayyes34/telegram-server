@@ -3,6 +3,7 @@ const bot = require('../config/telegramBot');
 const User = require('../models/User'); // Добавим User
 const SubscriptionPlan = require('../models/SubscriptionPlan'); // Добавим SubscriptionPlan
 const Subscription = require('../models/Subscription'); // Добавим Subscription
+const UserPurchase = require('../models/UserPurchase'); // Добавим UserPurchase
 
 const TEST_PROVIDER_TOKEN = process.env.TELEGRAM_TEST_PROVIDER_TOKEN;
 const MAIN_API_BASE_URL = process.env.MAIN_API_BASE_URL || 'https://rhythmcapsule.ru/api'; // URL вашего основного API
@@ -308,25 +309,27 @@ bot.on('successful_payment', async (msg) => {
       }
 
       try {
-        const grantAccessResponse = await fetch(`${MAIN_API_BASE_URL}/users/${telegramUserId}/grant-bundle-access`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        // Сохраняем покупку в локальной базе telegram сервера
+        const existingPurchase = await UserPurchase.findOne({ 
+          telegramUserId: telegramUserId, 
+          bundleId: purchasedBundleId 
+        });
+        
+        if (!existingPurchase) {
+          const newPurchase = new UserPurchase({
+            telegramUserId: telegramUserId,
             bundleId: purchasedBundleId,
             telegramPaymentChargeId: telegram_payment_charge_id,
             providerPaymentChargeId: provider_payment_charge_id,
-          }),
-        });
-
-        if (grantAccessResponse.ok) {
-          const grantResult = await grantAccessResponse.json();
-          console.log(`SuccessfulPayment (Bundle): Доступ к бандлу ${purchasedBundleId} для пользователя ${telegramUserId} успешно зарегистрирован на основном сервере.`, grantResult.message);
+          });
+          
+          await newPurchase.save();
+          console.log(`SuccessfulPayment (Bundle): Покупка бандла ${purchasedBundleId} для пользователя ${telegramUserId} сохранена в локальной базе.`);
         } else {
-          const errorResult = await grantAccessResponse.json().catch(() => ({ message: grantAccessResponse.statusText }));
-          console.error(`SuccessfulPayment (Bundle): Ошибка при регистрации покупки бандла ${purchasedBundleId} для пользователя ${telegramUserId} на основном сервере. Статус: ${grantAccessResponse.status}. Ответ:`, errorResult.message);
+          console.log(`SuccessfulPayment (Bundle): Покупка бандла ${purchasedBundleId} для пользователя ${telegramUserId} уже существует в локальной базе.`);
         }
       } catch (error) {
-        console.error(`SuccessfulPayment (Bundle): Сетевая ошибка или ошибка JSON при попытке зарегистрировать покупку бандла ${purchasedBundleId} для ${telegramUserId} на основном сервере:`, error);
+        console.error(`SuccessfulPayment (Bundle): Ошибка при сохранении покупки бандла ${purchasedBundleId} для ${telegramUserId} в локальной базе:`, error);
       }
     } else {
       console.error('SuccessfulPayment (Bundle): Не удалось извлечь purchasedBundleId из payload:', invoice_payload);

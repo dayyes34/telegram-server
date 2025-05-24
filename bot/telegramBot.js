@@ -9,6 +9,7 @@ const SequencerSession = require('../models/SequencerSession'); // <--- ЯВНЫ
 const userRoutes = require('../routes/userRoutes'); // Ваши маршруты для API
 const paymentRoutes = require('../routes/paymentRoutes'); // <--- ДОБАВЛЯЕМ ИМПОРТ МАРШРУТОВ ПЛАТЕЖЕЙ
 const subscriptionService = require('../services/subscriptionService'); // Импорт сервиса подписок
+const userPurchaseRoutes = require('../routes/userPurchaseRoutes'); // <--- ДОБАВЛЯЕМ МАРШРУТЫ ДЛЯ ПОКУПОК
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -53,6 +54,7 @@ mongoose.connection.on('error', err => {
 // Поэтому бэкенд должен слушать на /users и /status.
 app.use('/users', userRoutes); // Базовый путь для userRoutes теперь /users
 app.use('/api/payments', paymentRoutes); // <--- ДОБАВЛЯЕМ МАРШРУТЫ ДЛЯ ПЛАТЕЖЕЙ
+app.use('/api/users', userPurchaseRoutes); // <--- ДОБАВЛЯЕМ МАРШРУТЫ ДЛЯ ПОКУПОК
 
 // Базовый маршрут для проверки, что Express-сервер работает
 app.get('/status', (req, res) => {
