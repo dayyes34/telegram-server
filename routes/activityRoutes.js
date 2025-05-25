@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const activityController = require('../controllers/activityController');
-const authMiddleware = require('../middleware/authMiddleware');
+const authMiddleware = require('../middlewares/authMiddleware');
 
 // Записать активность пользователя
 router.post('/:telegramId/record', authMiddleware, activityController.recordActivity);
