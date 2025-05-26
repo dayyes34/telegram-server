@@ -3,6 +3,9 @@ const SubscriptionPlan = require('../models/SubscriptionPlan');
 const Subscription = require('../models/Subscription');
 const bot = require('../config/telegramBot');
 
+// Временное хранилище для данных платежей (в продакшене лучше использовать Redis)
+const paymentDataCache = new Map();
+
 // Получение всех планов подписок
 exports.getAllPlans = async (req, res) => {
   try {
@@ -72,7 +75,27 @@ exports.createPaymentLink = async (req, res) => {
     const displayName = customPlanName || plan.name; // Используем персональное название если есть
     const invoiceTitle = `Подписка: ${displayName}`;
     const invoiceDescription = `${plan.description}. Длительность: ${plan.duration} дней.`;
-    const payload = `subscription_${planId}_${userId}_${Date.now()}_${customPlanName ? encodeURIComponent(customPlanName) : 'default'}`;
+    
+    // Создаем короткий payload (максимум 128 байт)
+    // Используем только необходимые данные без длинных названий
+    const timestamp = Date.now();
+    const payload = `sub_${planId}_${userId}_${timestamp}`;
+    
+    // Сохраняем customPlanName отдельно для использования в обработке платежа
+    const paymentData = {
+      planId,
+      userId,
+      timestamp,
+      customPlanName: customPlanName || null
+    };
+    
+    // Сохраняем данные платежа в кэше с ключом payload
+    paymentDataCache.set(payload, paymentData);
+    
+    // Очищаем старые записи (старше 1 часа)
+    setTimeout(() => {
+      paymentDataCache.delete(payload);
+    }, 60 * 60 * 1000);
     
     console.log("DEBUG: TELEGRAM_TEST_PROVIDER_TOKEN value is:", process.env.TELEGRAM_TEST_PROVIDER_TOKEN);
 
@@ -142,7 +165,7 @@ exports.handlePaymentWebhook = async (req, res) => {
       const payloadParts = payload.split('_');
       const [type, planId, userId, timestamp] = payloadParts;
       
-      if (type !== 'subscription') {
+      if (type !== 'sub') {
         await bot.answerPreCheckoutQuery(id, false, 'Неверный тип платежа');
         return res.status(400).json({ message: 'Неверный тип платежа' });
       }
@@ -167,10 +190,18 @@ exports.handlePaymentWebhook = async (req, res) => {
       // Парсим payload
       const payloadParts = invoice_payload.split('_');
       const [type, planId, userId, timestamp] = payloadParts;
-      const customPlanName = payloadParts[4] ? decodeURIComponent(payloadParts[4]) : null;
       
-      if (type !== 'subscription') {
+      if (type !== 'sub') {
         return res.status(400).json({ message: 'Неверный тип платежа' });
+      }
+
+      // Получаем данные платежа из кэша
+      const cachedPaymentData = paymentDataCache.get(invoice_payload);
+      const customPlanName = cachedPaymentData ? cachedPaymentData.customPlanName : null;
+      
+      // Очищаем данные из кэша после использования
+      if (cachedPaymentData) {
+        paymentDataCache.delete(invoice_payload);
       }
 
       // Получаем план подписки и пользователя
