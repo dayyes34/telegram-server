@@ -6,6 +6,9 @@ const bot = require('../config/telegramBot');
 // Временное хранилище для данных платежей (в продакшене лучше использовать Redis)
 const paymentDataCache = new Map();
 
+// Экспортируем кэш для использования в других контроллерах
+module.exports.paymentDataCache = paymentDataCache;
+
 // Получение всех планов подписок
 exports.getAllPlans = async (req, res) => {
   try {
@@ -88,6 +91,10 @@ exports.createPaymentLink = async (req, res) => {
       timestamp,
       customPlanName: customPlanName || null
     };
+    
+    console.log('DEBUG: CreatePayment - customPlanName from request:', customPlanName);
+    console.log('DEBUG: CreatePayment - payload:', payload);
+    console.log('DEBUG: CreatePayment - paymentData:', paymentData);
     
     // Сохраняем данные платежа в кэше с ключом payload
     paymentDataCache.set(payload, paymentData);
@@ -195,14 +202,18 @@ exports.handlePaymentWebhook = async (req, res) => {
         return res.status(400).json({ message: 'Неверный тип платежа' });
       }
 
-      // Получаем данные платежа из кэша
-      const cachedPaymentData = paymentDataCache.get(invoice_payload);
-      const customPlanName = cachedPaymentData ? cachedPaymentData.customPlanName : null;
-      
-      // Очищаем данные из кэша после использования
-      if (cachedPaymentData) {
-        paymentDataCache.delete(invoice_payload);
-      }
+          // Получаем данные платежа из кэша
+    const cachedPaymentData = paymentDataCache.get(invoice_payload);
+    const customPlanName = cachedPaymentData ? cachedPaymentData.customPlanName : null;
+    
+    console.log('DEBUG: Webhook - invoice_payload:', invoice_payload);
+    console.log('DEBUG: Webhook - cachedPaymentData:', cachedPaymentData);
+    console.log('DEBUG: Webhook - customPlanName:', customPlanName);
+    
+    // Очищаем данные из кэша после использования
+    if (cachedPaymentData) {
+      paymentDataCache.delete(invoice_payload);
+    }
 
       // Получаем план подписки и пользователя
       const [plan, user] = await Promise.all([

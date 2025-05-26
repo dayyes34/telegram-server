@@ -245,6 +245,21 @@ bot.on('successful_payment', async (msg) => {
         return;
       }
 
+      // Получаем кастомное имя из кэша (импортируем кэш из subscriptionController)
+      const subscriptionController = require('./subscriptionController');
+      const paymentDataCache = subscriptionController.paymentDataCache;
+      const cachedPaymentData = paymentDataCache ? paymentDataCache.get(invoice_payload) : null;
+      const customPlanName = cachedPaymentData ? cachedPaymentData.customPlanName : null;
+      
+      console.log('DEBUG: Bot SuccessfulPayment - invoice_payload:', invoice_payload);
+      console.log('DEBUG: Bot SuccessfulPayment - cachedPaymentData:', cachedPaymentData);
+      console.log('DEBUG: Bot SuccessfulPayment - customPlanName:', customPlanName);
+      
+      // Очищаем данные из кэша после использования
+      if (cachedPaymentData && paymentDataCache) {
+        paymentDataCache.delete(invoice_payload);
+      }
+
       const startDate = new Date();
       const endDate = new Date(startDate);
       endDate.setDate(endDate.getDate() + plan.duration);
@@ -253,6 +268,7 @@ bot.on('successful_payment', async (msg) => {
         userId: user._id,
         telegramUserId: user.telegramId, // Убедимся, что telegramId пользователя есть
         planId: plan._id,
+        customPlanName: customPlanName && customPlanName !== 'default' ? customPlanName : null, // Добавляем кастомное имя
         status: 'active',
         startDate,
         endDate,
@@ -274,10 +290,11 @@ bot.on('successful_payment', async (msg) => {
       user.hasActiveSubscription = true;
       await user.save();
 
+      // Используем кастомное имя для сообщения, если оно есть
+      const displayName = customPlanName && customPlanName !== 'default' ? customPlanName : plan.name;
       await bot.sendMessage(
         user.telegramId,
-        `🎉 Поздравляем! Вы успешно оформили подписку "${plan.name}".\n\nВаша подписка действует до ${endDate.toLocaleDateString()}.
-Спасибо за поддержку!`
+        `🎉 Поздравляем! Вы успешно оформили подписку "${displayName}".\n\nВаша подписка действует до ${endDate.toLocaleDateString()}.\n\nСпасибо за поддержку!`
       );
       console.log(`SuccessfulPayment (Subscription): Подписка ${plan.name} для пользователя ${user.telegramId} (ID: ${user._id}) успешно создана и активирована.`);
 

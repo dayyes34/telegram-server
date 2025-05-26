@@ -222,7 +222,7 @@ exports.getUserProfile = async (req, res) => {
       lastActivity: user.lastActivity,
       sessions: user.sessions,
       hasActiveSubscription: user.hasActiveSubscription,
-      currentSubscription: user.currentSubscriptionId // Переименуем для ясности на клиенте
+      currentSubscription: user.currentSubscriptionId // Это уже заполненный объект подписки благодаря populate
     };
     
     res.status(200).json({
