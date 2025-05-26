@@ -122,11 +122,11 @@ bot.on('pre_checkout_query', async (preCheckoutQuery) => {
   console.log(`Получен pre_checkout_query от пользователя ${userIdFromQuery} для заказа ${invoicePayload}. Сумма: ${totalAmount} ${currency}. Query ID: ${queryId}`);
 
   const payloadParts = invoicePayload.split('_');
-  const type = payloadParts[0]; // 'subscription' или 'bundle'
+  const type = payloadParts[0]; // 'sub' или 'bundle'
 
-  if (type === 'subscription') {
+  if (type === 'sub') {
     // Логика для подписок
-    // payload: subscription_planId_dbUserId_timestamp
+    // payload: sub_planId_dbUserId_timestamp
     const planId = payloadParts[1];
     // const dbUserId = payloadParts[2]; // userId из нашей БД, если мы его туда клали
 
@@ -228,9 +228,9 @@ bot.on('successful_payment', async (msg) => {
   const payloadParts = invoice_payload.split('_');
   const type = payloadParts[0];
 
-  if (type === 'subscription') {
+  if (type === 'sub') {
     // Логика для подписок
-    // payload: subscription_planId_dbUserId_timestamp
+    // payload: sub_planId_dbUserId_timestamp
     const planId = payloadParts[1];
     const dbUserId = payloadParts[2]; // ID пользователя из нашей MongoDB
 
