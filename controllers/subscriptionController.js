@@ -50,7 +50,7 @@ exports.getUserSubscriptions = async (req, res) => {
 // Создание запроса на оплату через Telegram
 exports.createPaymentLink = async (req, res) => {
   try {
-    const { planId } = req.body;
+    const { planId, customPlanName } = req.body;
     if (!planId) {
       return res.status(400).json({ message: 'Не указан ID плана подписки' });
     }
@@ -69,9 +69,10 @@ exports.createPaymentLink = async (req, res) => {
     }
 
     // Формируем инвойс для оплаты через Telegram
-    const invoiceTitle = `Подписка: ${plan.name}`; // Возвращаем оригинальный title
-    const invoiceDescription = `${plan.description}. Длительность: ${plan.duration} дней.`; // Возвращаем оригинальный description
-    const payload = `subscription_${planId}_${userId}_${Date.now()}`; // Возвращаем оригинальный payload
+    const displayName = customPlanName || plan.name; // Используем персональное название если есть
+    const invoiceTitle = `Подписка: ${displayName}`;
+    const invoiceDescription = `${plan.description}. Длительность: ${plan.duration} дней.`;
+    const payload = `subscription_${planId}_${userId}_${Date.now()}_${customPlanName ? encodeURIComponent(customPlanName) : 'default'}`;
     
     console.log("DEBUG: TELEGRAM_TEST_PROVIDER_TOKEN value is:", process.env.TELEGRAM_TEST_PROVIDER_TOKEN);
 
@@ -83,8 +84,8 @@ exports.createPaymentLink = async (req, res) => {
         provider_token: process.env.TELEGRAM_TEST_PROVIDER_TOKEN,
         currency: plan.currency,
         prices: [{
-          label: plan.name, // Возвращаем оригинальный label (из plan.name)
-          amount: plan.price // Возвращаем оригинальный amount (из plan.price)
+          label: displayName, // Используем персональное название
+          amount: plan.price
         }],
         options: { // Сгруппируем опциональные параметры для лога
           need_name: false,
@@ -109,8 +110,8 @@ exports.createPaymentLink = async (req, res) => {
         process.env.TELEGRAM_TEST_PROVIDER_TOKEN, 
         plan.currency, 
         [{
-          label: plan.name, // Возвращаем оригинальный label (из plan.name)
-          amount: plan.price // Возвращаем оригинальный amount (из plan.price)
+          label: displayName, // Используем персональное название
+          amount: plan.price
         }],
         {} 
       );
@@ -138,7 +139,8 @@ exports.handlePaymentWebhook = async (req, res) => {
       const { id, payload } = pre_checkout_query;
       
       // Парсим payload, который мы сформировали при создании платежа
-      const [type, planId, userId, timestamp] = payload.split('_');
+      const payloadParts = payload.split('_');
+      const [type, planId, userId, timestamp] = payloadParts;
       
       if (type !== 'subscription') {
         await bot.answerPreCheckoutQuery(id, false, 'Неверный тип платежа');
@@ -163,7 +165,9 @@ exports.handlePaymentWebhook = async (req, res) => {
       const { invoice_payload, telegram_payment_charge_id, total_amount, currency } = successful_payment;
       
       // Парсим payload
-      const [type, planId, userId, timestamp] = invoice_payload.split('_');
+      const payloadParts = invoice_payload.split('_');
+      const [type, planId, userId, timestamp] = payloadParts;
+      const customPlanName = payloadParts[4] ? decodeURIComponent(payloadParts[4]) : null;
       
       if (type !== 'subscription') {
         return res.status(400).json({ message: 'Неверный тип платежа' });
@@ -189,6 +193,7 @@ exports.handlePaymentWebhook = async (req, res) => {
         userId: user._id,
         telegramUserId: user.telegramId,
         planId: plan._id,
+        customPlanName: customPlanName && customPlanName !== 'default' ? customPlanName : null,
         status: 'active',
         startDate,
         endDate,
@@ -210,9 +215,10 @@ exports.handlePaymentWebhook = async (req, res) => {
       await user.save();
 
       // Отправляем уведомление пользователю
+      const displayName = customPlanName && customPlanName !== 'default' ? customPlanName : plan.name;
       await bot.sendMessage(
         user.telegramId,
-        `🎉 Поздравляем! Вы успешно оформили подписку "${plan.name}".\n\nВаша подписка действует до ${endDate.toLocaleDateString()}.\n\nСпасибо за поддержку!`
+        `🎉 Поздравляем! Вы успешно оформили подписку "${displayName}".\n\nВаша подписка действует до ${endDate.toLocaleDateString()}.\n\nСпасибо за поддержку!`
       );
 
       return res.status(200).json({ success: true });

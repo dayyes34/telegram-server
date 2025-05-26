@@ -42,6 +42,10 @@ const subscriptionSchema = new mongoose.Schema({
     ref: 'SubscriptionPlan',
     required: true
   },
+  customPlanName: {
+    type: String,
+    default: null // Персональное название плана, сгенерированное пользователем
+  },
   status: {
     type: String,
     enum: ['active', 'expired', 'cancelled'],
