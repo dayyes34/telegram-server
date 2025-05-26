@@ -197,7 +197,7 @@ const managePlans = async () => {
   deactivate <plan_id>          - Деактивировать план
   activate <plan_id>            - Активировать план
   update-price <plan_id> <price> - Обновить цену плана (в копейках)
-  delete <plan_id>              - Удалить план (безопасно, с проверками)
+а  delete <plan_id>              - Удалить план (безопасно, с проверками)
   force-delete <plan_id>        - Принудительно удалить план (осторожно!)
 
 Примеры:
