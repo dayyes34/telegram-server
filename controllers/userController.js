@@ -194,10 +194,12 @@ exports.getUserProfile = async (req, res) => {
                            .populate('sessions', 'sessionName folderName createdAt')
                            .populate({
                              path: 'currentSubscriptionId',
-                             model: 'Subscription', // Явно указываем модель, если не указано в схеме User
+                             model: 'Subscription',
+                             select: 'planId customPlanName status startDate endDate autoRenew',
                              populate: {
                                path: 'planId',
-                               model: 'SubscriptionPlan'
+                               model: 'SubscriptionPlan',
+                               select: 'name description price currency duration'
                              }
                            });
     
