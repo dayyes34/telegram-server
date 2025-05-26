@@ -32,6 +32,28 @@ node scripts/manage-plans.js activate <plan_id>
 node scripts/manage-plans.js update-price <plan_id> <price_in_kopecks>
 ```
 
+#### Удаление плана (безопасно)
+```bash
+node scripts/manage-plans.js delete <plan_id>
+```
+
+#### Принудительное удаление плана
+```bash
+node scripts/manage-plans.js force-delete <plan_id>
+```
+
+#### Массовая очистка планов
+```bash
+# Показать планы, которые можно безопасно удалить
+node scripts/cleanup-plans.js show-deletable
+
+# Удалить все неактивные планы без подписок
+node scripts/cleanup-plans.js inactive
+
+# Удалить все тестовые планы
+node scripts/cleanup-plans.js test
+```
+
 ### 2. Просмотр подписок пользователей
 
 #### Все активные подписки
@@ -57,6 +79,33 @@ node scripts/add-new-plan.js
 ```
 
 Или отредактируйте файл `scripts/add-new-plan.js` для создания своего плана.
+
+### 4. Управление подписками пользователей
+
+#### Просмотр подписок пользователя
+```bash
+node scripts/manage-user-subscriptions.js show <telegram_id_or_name>
+```
+
+#### Отмена подписки (мягкая отписка)
+```bash
+node scripts/manage-user-subscriptions.js cancel <subscription_id> [reason]
+```
+
+#### Немедленное завершение подписки
+```bash
+node scripts/manage-user-subscriptions.js terminate <subscription_id> [reason]
+```
+
+#### Продление подписки
+```bash
+node scripts/manage-user-subscriptions.js extend <subscription_id> <days>
+```
+
+#### Поиск пользователей
+```bash
+node scripts/manage-user-subscriptions.js search <query>
+```
 
 ## 📊 Текущие планы подписки
 
@@ -100,12 +149,21 @@ curl -X POST http://localhost:5001/api/subscriptions/check \
 - `GET /api/payments/subscription-plans` - получить все активные планы
 - `GET /api/payments/subscription-plans/:id` - получить конкретный план
 
-### Требующие авторизации
+### Требующие авторизации пользователя
 - `GET /api/payments/subscriptions` - подписки пользователя
 - `GET /api/payments/subscription-status` - статус подписки
 - `GET /api/payments/current-subscription` - текущая активная подписка
 - `POST /api/payments/create-payment` - создать платеж
 - `PUT /api/payments/subscriptions/:id/cancel-auto-renew` - отключить автопродление
+
+### Административные (требуют ADMIN_API_KEY)
+- `GET /api/admin/users` - все пользователи с подписками
+- `GET /api/admin/users/search?query=<search>` - поиск пользователей
+- `GET /api/admin/users/:userId/subscriptions` - подписки пользователя
+- `PUT /api/admin/subscriptions/:id/cancel` - отменить подписку (мягко)
+- `PUT /api/admin/subscriptions/:id/terminate` - завершить подписку (немедленно)
+- `PUT /api/admin/subscriptions/:id/extend` - продлить подписку
+- `GET /api/admin/stats` - статистика подписок
 
 ## 💳 Платежная система
 
@@ -136,6 +194,34 @@ curl -X POST http://localhost:5001/api/subscriptions/check \
 ### Получение статистики
 ```bash
 node scripts/view-subscriptions.js stats
+```
+
+## 📊 Где хранятся подписки
+
+### Основные коллекции MongoDB
+
+1. **subscriptions** - основная таблица подписок
+2. **users** - пользователи с информацией о подписках  
+3. **subscriptionplans** - планы подписок
+
+### Связи между данными
+
+```
+User (пользователь)
+├── subscriptions: [ObjectId] - массив всех подписок
+├── currentSubscriptionId: ObjectId - текущая активная подписка
+└── hasActiveSubscription: Boolean - флаг активной подписки
+
+Subscription (подписка)
+├── userId: ObjectId → User
+├── planId: ObjectId → SubscriptionPlan
+├── status: 'active' | 'expired' | 'cancelled'
+├── startDate, endDate: Date
+└── paymentHistory: [] - история платежей
+
+SubscriptionPlan (план)
+├── name, description, price, duration
+└── isActive: Boolean
 ```
 
 ## 🔧 Структура базы данных
@@ -227,6 +313,24 @@ node scripts/manage-plans.js list
 # Деактивировать план
 node scripts/manage-plans.js deactivate 682e3d83c8ae40a013b458af
 ```
+
+### Удаление планов
+```bash
+# Показать планы, которые можно безопасно удалить
+node scripts/cleanup-plans.js show-deletable
+
+# Безопасное удаление конкретного плана
+node scripts/manage-plans.js delete 682e3d83c8ae40a013b458af
+
+# Массовое удаление неактивных планов
+node scripts/cleanup-plans.js inactive
+```
+
+⚠️ **ВАЖНО**: Удаление планов необратимо! Рекомендации:
+- Всегда используйте `show-deletable` перед удалением
+- Делайте резервную копию базы данных
+- Предпочитайте деактивацию удалению
+- Планы с активными подписками удалить нельзя
 
 ### Мониторинг истекающих подписок
 ```bash

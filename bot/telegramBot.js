@@ -10,6 +10,7 @@ const userRoutes = require('../routes/userRoutes'); // Ваши маршруты
 const paymentRoutes = require('../routes/paymentRoutes'); // <--- ДОБАВЛЯЕМ ИМПОРТ МАРШРУТОВ ПЛАТЕЖЕЙ
 const subscriptionService = require('../services/subscriptionService'); // Импорт сервиса подписок
 const userPurchaseRoutes = require('../routes/userPurchaseRoutes'); // <--- ДОБАВЛЯЕМ МАРШРУТЫ ДЛЯ ПОКУПОК
+const adminRoutes = require('../routes/adminRoutes'); // <--- ДОБАВЛЯЕМ АДМИНИСТРАТИВНЫЕ МАРШРУТЫ
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -55,6 +56,7 @@ mongoose.connection.on('error', err => {
 app.use('/users', userRoutes); // Базовый путь для userRoutes теперь /users
 app.use('/api/payments', paymentRoutes); // <--- ДОБАВЛЯЕМ МАРШРУТЫ ДЛЯ ПЛАТЕЖЕЙ
 app.use('/api/users', userPurchaseRoutes); // <--- ДОБАВЛЯЕМ МАРШРУТЫ ДЛЯ ПОКУПОК
+app.use('/api/admin', adminRoutes); // <--- ДОБАВЛЯЕМ АДМИНИСТРАТИВНЫЕ МАРШРУТЫ
 
 // Базовый маршрут для проверки, что Express-сервер работает
 app.get('/status', (req, res) => {
