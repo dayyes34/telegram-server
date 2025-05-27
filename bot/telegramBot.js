@@ -10,6 +10,7 @@ const userRoutes = require('../routes/userRoutes'); // Ваши маршруты
 const paymentRoutes = require('../routes/paymentRoutes'); // <--- ДОБАВЛЯЕМ ИМПОРТ МАРШРУТОВ ПЛАТЕЖЕЙ
 const subscriptionService = require('../services/subscriptionService'); // Импорт сервиса подписок
 const userPurchaseRoutes = require('../routes/userPurchaseRoutes'); // <--- ДОБАВЛЯЕМ МАРШРУТЫ ДЛЯ ПОКУПОК
+const savedSlotsRoutes = require('../routes/savedSlotsRoutes'); // <--- ДОБАВЛЯЕМ МАРШРУТЫ ДЛЯ СОХРАНЕННЫХ СЛОТОВ
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -55,6 +56,7 @@ mongoose.connection.on('error', err => {
 app.use('/users', userRoutes); // Базовый путь для userRoutes теперь /users
 app.use('/api/payments', paymentRoutes); // <--- ДОБАВЛЯЕМ МАРШРУТЫ ДЛЯ ПЛАТЕЖЕЙ
 app.use('/api/users', userPurchaseRoutes); // <--- ДОБАВЛЯЕМ МАРШРУТЫ ДЛЯ ПОКУПОК
+app.use('/api/saved-slots', savedSlotsRoutes); // <--- ДОБАВЛЯЕМ МАРШРУТЫ ДЛЯ СОХРАНЕННЫХ СЛОТОВ
 
 // Базовый маршрут для проверки, что Express-сервер работает
 app.get('/status', (req, res) => {

@@ -34,6 +34,11 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'SequencerSession'
   }],
+  // Сохраненные слоты пользователя
+  savedSlots: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SavedSlot'
+  }],
   // Добавленные поля для подписок
   subscriptions: [{
     type: mongoose.Schema.Types.ObjectId,

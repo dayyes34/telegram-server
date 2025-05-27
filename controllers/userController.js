@@ -192,6 +192,7 @@ exports.getUserProfile = async (req, res) => {
     const user = await User.findById(req.userId)
                            .select('-__v')
                            .populate('sessions', 'sessionName folderName createdAt')
+                           .populate('savedSlots', 'slotNumber name description createdAt lastUsed')
                            .populate({
                              path: 'currentSubscriptionId',
                              model: 'Subscription',
@@ -221,6 +222,7 @@ exports.getUserProfile = async (req, res) => {
       registeredAt: user.registeredAt,
       lastActivity: user.lastActivity,
       sessions: user.sessions,
+      savedSlots: user.savedSlots,
       hasActiveSubscription: user.hasActiveSubscription,
       currentSubscription: user.currentSubscriptionId // Это уже заполненный объект подписки благодаря populate
     };
