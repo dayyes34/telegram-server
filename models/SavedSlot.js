@@ -79,7 +79,8 @@ savedSlotSchema.pre('save', function(next) {
 
 // Статический метод для получения доступных слотов пользователя
 savedSlotSchema.statics.getAvailableSlots = async function(userId, hasActiveSubscription) {
-  const maxSlots = hasActiveSubscription ? 3 : 0; // Слоты доступны только с подпиской
+  // const maxSlots = hasActiveSubscription ? 3 : 0; // Слоты доступны только с подпиской - ВРЕМЕННО ОТКЛЮЧЕНО
+  const maxSlots = 3; // Временно доступны всем
   
   if (maxSlots === 0) {
     return [];
@@ -100,9 +101,9 @@ savedSlotSchema.statics.getAvailableSlots = async function(userId, hasActiveSubs
 
 // Статический метод для проверки доступности слота
 savedSlotSchema.statics.canUseSlot = async function(userId, hasActiveSubscription) {
-  if (!hasActiveSubscription) {
-    return false;
-  }
+  // if (!hasActiveSubscription) {
+  //   return false;
+  // }
   
   const usedSlotsCount = await this.countDocuments({ userId });
   return usedSlotsCount < 3;

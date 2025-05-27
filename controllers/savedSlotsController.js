@@ -12,14 +12,14 @@ exports.getUserSavedSlots = async (req, res) => {
       return res.status(404).json({ message: 'Пользователь не найден' });
     }
     
-    // Проверяем наличие активной подписки
-    if (!user.hasActiveSubscription) {
-      return res.status(403).json({ 
-        message: 'Сохраненные слоты доступны только с активной подпиской',
-        hasAccess: false,
-        slots: []
-      });
-    }
+    // Проверяем наличие активной подписки - ВРЕМЕННО ОТКЛЮЧЕНО
+    // if (!user.hasActiveSubscription) {
+    //   return res.status(403).json({ 
+    //     message: 'Сохраненные слоты доступны только с активной подпиской',
+    //     hasAccess: false,
+    //     slots: []
+    //   });
+    // }
     
     // Получаем сохраненные слоты
     const savedSlots = await SavedSlot.find({ userId: req.userId })
@@ -68,11 +68,11 @@ exports.saveSessionToSlot = async (req, res) => {
       return res.status(404).json({ message: 'Пользователь не найден' });
     }
     
-    if (!user.hasActiveSubscription) {
-      return res.status(403).json({ 
-        message: 'Сохранение слотов доступно только с активной подпиской' 
-      });
-    }
+    // if (!user.hasActiveSubscription) {
+    //   return res.status(403).json({ 
+    //     message: 'Сохранение слотов доступно только с активной подпиской' 
+    //   });
+    // }
     
     // Проверяем, можно ли использовать слот
     const canUse = await SavedSlot.canUseSlot(req.userId, true);
@@ -170,11 +170,11 @@ exports.loadSessionFromSlot = async (req, res) => {
       return res.status(404).json({ message: 'Пользователь не найден' });
     }
     
-    if (!user.hasActiveSubscription) {
-      return res.status(403).json({ 
-        message: 'Загрузка слотов доступна только с активной подпиской' 
-      });
-    }
+    // if (!user.hasActiveSubscription) {
+    //   return res.status(403).json({ 
+    //     message: 'Загрузка слотов доступна только с активной подпиской' 
+    //   });
+    // }
     
     // Находим слот
     const savedSlot = await SavedSlot.findOne({ 
@@ -215,11 +215,11 @@ exports.deleteSlot = async (req, res) => {
       return res.status(404).json({ message: 'Пользователь не найден' });
     }
     
-    if (!user.hasActiveSubscription) {
-      return res.status(403).json({ 
-        message: 'Управление слотами доступно только с активной подпиской' 
-      });
-    }
+    // if (!user.hasActiveSubscription) {
+    //   return res.status(403).json({ 
+    //     message: 'Управление слотами доступно только с активной подпиской' 
+    //   });
+    // }
     
     // Находим и удаляем слот
     const savedSlot = await SavedSlot.findOneAndDelete({ 
@@ -273,11 +273,11 @@ exports.renameSlot = async (req, res) => {
       return res.status(404).json({ message: 'Пользователь не найден' });
     }
     
-    if (!user.hasActiveSubscription) {
-      return res.status(403).json({ 
-        message: 'Управление слотами доступно только с активной подпиской' 
-      });
-    }
+    // if (!user.hasActiveSubscription) {
+    //   return res.status(403).json({ 
+    //     message: 'Управление слотами доступно только с активной подпиской' 
+    //   });
+    // }
     
     // Находим и обновляем слот
     const savedSlot = await SavedSlot.findOneAndUpdate(
