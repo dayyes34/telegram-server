@@ -83,7 +83,6 @@ const createInvoice = async (req, res) => {
   // Добавляем photo_url только если он есть
   if (invoiceParams.photo_url) {
     invoiceOptions.photo_url = invoiceParams.photo_url;
-    invoiceOptions.photo_size = 512;
     invoiceOptions.photo_width = 512;
     invoiceOptions.photo_height = 512;
   }
