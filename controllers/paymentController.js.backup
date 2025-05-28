@@ -160,7 +160,6 @@ const createCollectionInvoice = async (req, res) => {
     provider_token: TEST_PROVIDER_TOKEN,
     currency: collectionDetails.currency,
     prices: [{ label: collectionDetails.title, amount: collectionDetails.price_in_smallest_unit }],
-    photo_url: collectionDetails.photo_url, // Добавляем изображение коллекции
   };
 
   console.log("DEBUG (paymentController): Arguments for createCollectionInvoiceLink:", JSON.stringify(invoiceParams, null, 2));
@@ -174,9 +173,7 @@ const createCollectionInvoice = async (req, res) => {
       invoiceParams.provider_token,
       invoiceParams.currency,
       invoiceParams.prices,
-      {
-        photo_url: invoiceParams.photo_url, // Передаем изображение коллекции
-      }
+      {}
     );
 
     if (!invoiceLink) {
@@ -537,36 +534,4 @@ bot.on('successful_payment', async (msg) => {
 
           console.log(`SuccessfulPayment (Collection): Покупка коллекции ${purchasedCollectionId} (${bundles.length} бандлов) для пользователя ${telegramUserId} обработана.`);
         } else {
-          console.error(`SuccessfulPayment (Collection): Не удалось получить бандлы коллекции ${purchasedCollectionId}`);
-        }
-      } catch (error) {
-        console.error(`SuccessfulPayment (Collection): Ошибка при сохранении покупки коллекции ${purchasedCollectionId} для ${telegramUserId}:`, error);
-      }
-    } else {
-      console.error('SuccessfulPayment (Collection): Не удалось извлечь purchasedCollectionId из payload:', invoice_payload);
-      collectionTitleForMessage = 'ваша коллекция';
-    }
-
-    try {
-      await bot.sendMessage(chatId, 
-        `Спасибо за покупку коллекции "${collectionTitleForMessage}"!\n\nСумма: ${total_amount / 100} ${currency}.\nДоступ ко всем бандлам коллекции предоставлен. Вы можете найти их в соответствующем разделе приложения.`
-      );
-      console.log(`Сообщение об успешной покупке коллекции ("${collectionTitleForMessage}") отправлено пользователю ${telegramUserId} в чат ${chatId}.`);
-    } catch (error) {
-      console.error(`Ошибка при отправке сообщения об успешной покупке коллекции пользователю ${telegramUserId}:`, error);
-    }
-  } else {
-    console.error('SuccessfulPayment: Неизвестный тип payload:', invoice_payload);
-    try {
-       await bot.sendMessage(telegramUserId, 'Ваш платеж прошел успешно, но мы не смогли определить тип покупки. Пожалуйста, свяжитесь с поддержкой.');
-    } catch (sendError) {
-      console.error('Failed to send error message to user about unknown purchase type', sendError);
-    }
-  }
-});
-
-module.exports = {
-  createInvoice,
-  createCollectionInvoice,
-  // handlePaymentWebhook теперь не нужен, если вся логика в bot.on()
-};
+          console.error(`
