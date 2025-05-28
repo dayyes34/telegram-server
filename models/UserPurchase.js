@@ -11,6 +11,12 @@ const userPurchaseSchema = new mongoose.Schema({
     required: true,
     index: true,
   },
+  collectionId: {
+    type: String, // ID коллекции, если покупка была сделана через коллекцию
+    default: null,
+    index: true,
+    sparse: true,
+  },
   purchaseDate: {
     type: Date,
     default: Date.now,

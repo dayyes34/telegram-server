@@ -10,6 +10,10 @@ const authMiddleware = require('../middlewares/authMiddleware');
 // Если у вас есть система аутентификации для WebApp, вы можете извлекать userId из req.user после authMiddleware
 router.post('/create-invoice', /* authMiddleware, */ paymentController.createInvoice);
 
+// POST /api/payments/create-collection-invoice
+// Создание инвойса для покупки коллекции
+router.post('/create-collection-invoice', /* authMiddleware, */ paymentController.createCollectionInvoice);
+
 // Публичные маршруты (не требуют авторизации)
 // Вебхук для обработки платежей от Telegram
 router.post('/webhook', subscriptionController.handlePaymentWebhook);

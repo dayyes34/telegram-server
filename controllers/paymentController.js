@@ -108,6 +108,98 @@ const createInvoice = async (req, res) => {
   }
 };
 
+const createCollectionInvoice = async (req, res) => {
+  const { collectionId, userId } = req.body;
+  const fetch = (await import('node-fetch')).default; // Динамический импорт
+
+  if (!TEST_PROVIDER_TOKEN) {
+    console.error('Тестовый токен провайдера не найден в переменных окружения!');
+    return res.status(500).json({ message: 'Ошибка конфигурации сервера: отсутствует токен провайдера.' });
+  }
+
+  if (!userId) {
+    console.error('UserID (telegramId) не предоставлен для создания счета коллекции');
+    return res.status(400).json({ message: 'Необходим ID пользователя для создания счета.' });
+  }
+
+  if (!collectionId) {
+    console.error('CollectionID не предоставлен для создания счета');
+    return res.status(400).json({ message: 'Необходим ID коллекции для создания счета.' });
+  }
+
+  let collectionDetails;
+  try {
+    const collectionResponse = await fetch(`${MAIN_API_BASE_URL}/bundle-collections/${collectionId}/details`);
+    if (!collectionResponse.ok) {
+      const errorData = await collectionResponse.json().catch(() => ({ message: collectionResponse.statusText }));
+      console.error(`Ошибка при получении деталей коллекции ${collectionId} с основного API: ${collectionResponse.status}`, errorData.message);
+      return res.status(collectionResponse.status === 404 ? 404 : 500).json({ 
+        message: errorData.message || 'Не удалось получить информацию о коллекции от основного сервера.' 
+      });
+    }
+    collectionDetails = await collectionResponse.json();
+    
+    // Проверка, что все необходимые поля получены
+    if (!collectionDetails.title || collectionDetails.price_in_smallest_unit === undefined || !collectionDetails.currency) {
+        console.error(`Неполные данные для коллекции ${collectionId} получены с основного API:`, collectionDetails);
+        return res.status(500).json({ message: 'Получены неполные данные о коллекции от основного сервера.' });
+    }
+
+  } catch (error) {
+    console.error(`Сетевая ошибка или ошибка JSON при получении деталей коллекции ${collectionId}:`, error);
+    return res.status(500).json({ message: 'Ошибка связи с основным сервером для получения информации о коллекции.' });
+  }
+  
+  const payload = `collection_purchase_${collectionId}_user_${userId}_${Date.now()}`;
+  
+  // Параметры для инвойса
+  const invoiceParams = {
+    title: collectionDetails.title,
+    description: collectionDetails.description || '',
+    payload: payload,
+    provider_token: TEST_PROVIDER_TOKEN,
+    currency: collectionDetails.currency,
+    prices: [{ label: collectionDetails.title, amount: collectionDetails.price_in_smallest_unit }],
+  };
+
+  console.log("DEBUG (paymentController): Arguments for createCollectionInvoiceLink:", JSON.stringify(invoiceParams, null, 2));
+
+  try {
+    // Создаем ссылку на инвойс вместо прямой отправки
+    const invoiceLink = await bot.createInvoiceLink(
+      invoiceParams.title,
+      invoiceParams.description,
+      invoiceParams.payload,
+      invoiceParams.provider_token,
+      invoiceParams.currency,
+      invoiceParams.prices,
+      {}
+    );
+
+    if (!invoiceLink) {
+      console.error('Не удалось создать ссылку на инвойс коллекции от Telegram API.');
+      return res.status(500).json({ message: 'Не удалось получить ссылку на инвойс от Telegram.' });
+    }
+    
+    console.log('Ссылка на инвойс коллекции успешно создана для пользователя:', userId, 'коллекция:', collectionId, 'ссылка:', invoiceLink);
+    // Отправляем ссылку на фронтенд
+    res.status(200).json({ 
+      message: 'Ссылка на инвойс коллекции успешно создана.',
+      invoice_link: invoiceLink
+    });
+
+  } catch (error) {
+    console.error('Ошибка при создании ссылки на инвойс коллекции Telegram:', error.response ? error.response.body : error);
+    let errorMessage = 'Не удалось создать ссылку на инвойс коллекции.';
+    if (error.response && error.response.body && error.response.body.description) {
+        errorMessage += ` Детали: ${error.response.body.description}`;
+    } else if (error.message) {
+        errorMessage += ` Детали: ${error.message}`;
+    }
+    res.status(500).json({ message: errorMessage });
+  }
+};
+
 // Обработчик PreCheckoutQuery (ОБЯЗАТЕЛЬНО НУЖЕН для подтверждения платежа)
 // Telegram отправляет этот запрос перед тем, как списать деньги.
 // Вы должны ответить в течение 10 секунд.
@@ -122,7 +214,7 @@ bot.on('pre_checkout_query', async (preCheckoutQuery) => {
   console.log(`Получен pre_checkout_query от пользователя ${userIdFromQuery} для заказа ${invoicePayload}. Сумма: ${totalAmount} ${currency}. Query ID: ${queryId}`);
 
   const payloadParts = invoicePayload.split('_');
-  const type = payloadParts[0]; // 'sub' или 'bundle'
+  const type = payloadParts[0]; // 'sub' или 'bundle' или 'collection'
 
   if (type === 'sub') {
     // Логика для подписок
@@ -199,6 +291,39 @@ bot.on('pre_checkout_query', async (preCheckoutQuery) => {
       // Если это ошибка нашей валидации, то false.
       // Лучше ответить false, чтобы не было зависаний на стороне пользователя
       await bot.answerPreCheckoutQuery(queryId, false, { error_message: 'Внутренняя ошибка сервера при проверке товара.' });
+    }
+  } else if (type === 'collection') {
+    // Логика для коллекций
+    const collectionIdFromPayload = payloadParts.length > 2 ? payloadParts[2] : null; // collectionId был третьим элементом collection_purchase_COLLECTIONID_user_USERID_...
+
+    if (!collectionIdFromPayload) {
+      console.error('PreCheckout (Collection): Не удалось извлечь collectionId из payload:', invoicePayload);
+      await bot.answerPreCheckoutQuery(queryId, false, { error_message: 'Ошибка обработки заказа (коллекция).' });
+      return;
+    }
+    try {
+      const collectionResponse = await fetch(`${MAIN_API_BASE_URL}/bundle-collections/${collectionIdFromPayload}/details`);
+      if (!collectionResponse.ok) {
+        const errorData = await collectionResponse.json().catch(() => ({ message: 'Не удалось проверить коллекцию' }));
+        console.error(`PreCheckout (Collection): Ошибка при получении деталей коллекции ${collectionIdFromPayload} с основного API: ${collectionResponse.status}`, errorData.message);
+        await bot.answerPreCheckoutQuery(queryId, false, { error_message: errorData.message });
+        return;
+      }
+      const collectionDetails = await collectionResponse.json();
+
+      if (collectionDetails.price_in_smallest_unit !== totalAmount || collectionDetails.currency.toUpperCase() !== currency.toUpperCase()) {
+        console.warn(`PreCheckout (Collection): Несоответствие цены/валюты для коллекции ${collectionIdFromPayload}.`);
+        console.warn(`  Ожидалось: ${collectionDetails.price_in_smallest_unit} ${collectionDetails.currency}, Получено от TG: ${totalAmount} ${currency}`);
+        await bot.answerPreCheckoutQuery(queryId, false, { error_message: 'Цена или валюта коллекции изменились. Пожалуйста, попробуйте снова.' });
+        return;
+      }
+
+      await bot.answerPreCheckoutQuery(queryId, true);
+      console.log(`Успешно ответили на pre_checkout_query (ID: ${queryId}) для коллекции ${collectionIdFromPayload}.`);
+
+    } catch (error) {
+      console.error(`PreCheckout (Collection): Ошибка при проверке коллекции ${collectionIdFromPayload}:`, error);
+      await bot.answerPreCheckoutQuery(queryId, false, { error_message: 'Внутренняя ошибка сервера при проверке коллекции.' });
     }
   } else {
     console.error('PreCheckout: Неизвестный тип payload:', invoicePayload);
@@ -361,6 +486,72 @@ bot.on('successful_payment', async (msg) => {
     } catch (error) {
       console.error(`Ошибка при отправке сообщения об успешной покупке пользователю ${telegramUserId}:`, error);
     }
+  } else if (type === 'collection') {
+    // Логика для коллекций
+    const purchasedCollectionId = payloadParts.length > 2 ? payloadParts[2] : null;
+    let collectionTitleForMessage = purchasedCollectionId || 'купленная коллекция';
+
+    if (purchasedCollectionId) {
+      try {
+        const collectionDetailsResponse = await fetch(`${MAIN_API_BASE_URL}/bundle-collections/${purchasedCollectionId}/details`);
+        if (collectionDetailsResponse.ok) {
+          const collectionDetails = await collectionDetailsResponse.json();
+          collectionTitleForMessage = collectionDetails.title || collectionTitleForMessage;
+        }
+      } catch (fetchError) {
+        console.warn(`SuccessfulPayment (Collection): Не удалось получить название коллекции ${purchasedCollectionId} для сообщения. Ошибка: ${fetchError.message}`);
+      }
+
+      try {
+        // Получаем все бандлы коллекции
+        const collectionBundlesResponse = await fetch(`${MAIN_API_BASE_URL}/bundle-collections/${purchasedCollectionId}/bundles`);
+        if (collectionBundlesResponse.ok) {
+          const collectionData = await collectionBundlesResponse.json();
+          const bundles = collectionData.bundles || [];
+
+          // Сохраняем покупку каждого бандла в коллекции
+          for (const bundle of bundles) {
+            const existingPurchase = await UserPurchase.findOne({ 
+              telegramUserId: telegramUserId, 
+              bundleId: bundle.id 
+            });
+            
+            if (!existingPurchase) {
+              const newPurchase = new UserPurchase({
+                telegramUserId: telegramUserId,
+                bundleId: bundle.id,
+                collectionId: purchasedCollectionId, // Указываем, что это покупка через коллекцию
+                telegramPaymentChargeId: telegram_payment_charge_id,
+                providerPaymentChargeId: provider_payment_charge_id,
+              });
+              
+              await newPurchase.save();
+              console.log(`SuccessfulPayment (Collection): Покупка бандла ${bundle.id} (${bundle.name}) из коллекции ${purchasedCollectionId} для пользователя ${telegramUserId} сохранена.`);
+            } else {
+              console.log(`SuccessfulPayment (Collection): Покупка бандла ${bundle.id} для пользователя ${telegramUserId} уже существует.`);
+            }
+          }
+
+          console.log(`SuccessfulPayment (Collection): Покупка коллекции ${purchasedCollectionId} (${bundles.length} бандлов) для пользователя ${telegramUserId} обработана.`);
+        } else {
+          console.error(`SuccessfulPayment (Collection): Не удалось получить бандлы коллекции ${purchasedCollectionId}`);
+        }
+      } catch (error) {
+        console.error(`SuccessfulPayment (Collection): Ошибка при сохранении покупки коллекции ${purchasedCollectionId} для ${telegramUserId}:`, error);
+      }
+    } else {
+      console.error('SuccessfulPayment (Collection): Не удалось извлечь purchasedCollectionId из payload:', invoice_payload);
+      collectionTitleForMessage = 'ваша коллекция';
+    }
+
+    try {
+      await bot.sendMessage(chatId, 
+        `Спасибо за покупку коллекции "${collectionTitleForMessage}"!\n\nСумма: ${total_amount / 100} ${currency}.\nДоступ ко всем бандлам коллекции предоставлен. Вы можете найти их в соответствующем разделе приложения.`
+      );
+      console.log(`Сообщение об успешной покупке коллекции ("${collectionTitleForMessage}") отправлено пользователю ${telegramUserId} в чат ${chatId}.`);
+    } catch (error) {
+      console.error(`Ошибка при отправке сообщения об успешной покупке коллекции пользователю ${telegramUserId}:`, error);
+    }
   } else {
     console.error('SuccessfulPayment: Неизвестный тип payload:', invoice_payload);
     try {
@@ -373,5 +564,6 @@ bot.on('successful_payment', async (msg) => {
 
 module.exports = {
   createInvoice,
+  createCollectionInvoice,
   // handlePaymentWebhook теперь не нужен, если вся логика в bot.on()
 }; 
