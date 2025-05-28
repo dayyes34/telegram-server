@@ -68,6 +68,27 @@ const createInvoice = async (req, res) => {
   };
 
   console.log("DEBUG (paymentController): Arguments for createInvoiceLink:", JSON.stringify(invoiceParams, null, 2)); // Добавляем лог
+  console.log("DEBUG (paymentController): Photo URL being sent:", invoiceParams.photo_url);
+  console.log("DEBUG (paymentController): Photo URL accessible test - will be checked by Telegram servers");
+
+  // Подготавливаем опции для инвойса
+  const invoiceOptions = {
+    need_name: false,
+    need_phone_number: false,
+    need_email: false,
+    need_shipping_address: false,
+    is_flexible: false
+  };
+
+  // Добавляем photo_url только если он есть
+  if (invoiceParams.photo_url) {
+    invoiceOptions.photo_url = invoiceParams.photo_url;
+    invoiceOptions.photo_size = 512;
+    invoiceOptions.photo_width = 512;
+    invoiceOptions.photo_height = 512;
+  }
+
+  console.log("DEBUG (paymentController): Final invoice options:", JSON.stringify(invoiceOptions, null, 2));
 
   try {
     // Создаем ссылку на инвойс вместо прямой отправки
@@ -78,10 +99,7 @@ const createInvoice = async (req, res) => {
       invoiceParams.provider_token,
       invoiceParams.currency,
       invoiceParams.prices,
-      {
-        photo_url: invoiceParams.photo_url, // Передаем изображение
-        // start_parameter: invoiceParams.start_parameter
-      }
+      invoiceOptions
     );
 
     if (!invoiceLink) {
@@ -164,6 +182,27 @@ const createCollectionInvoice = async (req, res) => {
   };
 
   console.log("DEBUG (paymentController): Arguments for createCollectionInvoiceLink:", JSON.stringify(invoiceParams, null, 2));
+  console.log("DEBUG (paymentController): Collection Photo URL being sent:", invoiceParams.photo_url);
+  console.log("DEBUG (paymentController): Collection Photo URL accessible test - will be checked by Telegram servers");
+
+  // Подготавливаем опции для инвойса
+  const invoiceOptions = {
+    need_name: false,
+    need_phone_number: false,
+    need_email: false,
+    need_shipping_address: false,
+    is_flexible: false
+  };
+
+  // Добавляем photo_url только если он есть
+  if (invoiceParams.photo_url) {
+    invoiceOptions.photo_url = invoiceParams.photo_url;
+    invoiceOptions.photo_size = 512;
+    invoiceOptions.photo_width = 512;
+    invoiceOptions.photo_height = 512;
+  }
+
+  console.log("DEBUG (paymentController): Final invoice options:", JSON.stringify(invoiceOptions, null, 2));
 
   try {
     // Создаем ссылку на инвойс вместо прямой отправки
@@ -174,9 +213,7 @@ const createCollectionInvoice = async (req, res) => {
       invoiceParams.provider_token,
       invoiceParams.currency,
       invoiceParams.prices,
-      {
-        photo_url: invoiceParams.photo_url, // Передаем изображение коллекции
-      }
+      invoiceOptions
     );
 
     if (!invoiceLink) {
